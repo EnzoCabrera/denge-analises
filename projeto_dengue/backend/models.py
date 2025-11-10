@@ -1,7 +1,3 @@
-"""
-Módulo de Machine Learning - Treinamento e avaliação de modelos
-"""
-
 import pandas as pd
 import numpy as np
 from collections import Counter
@@ -27,7 +23,7 @@ from backend.config import ML_CONFIG
 
 
 class ModeloDengue:
-    """Classe para gerenciar modelos de predição de dengue"""
+    #Classe para gerenciar modelos de predição de dengue
 
     def __init__(self):
         self.modelos = {}
@@ -38,15 +34,8 @@ class ModeloDengue:
         self.resultados = None
 
     def treinar_modelos(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Treina múltiplos modelos e retorna comparação
+        #Treina múltiplos modelos e retorna comparação
 
-        Args:
-            df: DataFrame com dados
-
-        Returns:
-            DataFrame com resultados dos modelos
-        """
         # FEATURES EXPANDIDAS (incluindo interações)
         df_features = self._criar_features_ml(df)
 
@@ -162,15 +151,9 @@ class ModeloDengue:
         return self.resultados
 
     def _criar_features_ml(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Cria features de Machine Learning
 
-        Args:
-            df: DataFrame original
+        #Cria features de Machine Learning
 
-        Returns:
-            DataFrame com features expandidas
-        """
         df_ml = df.copy()
 
         # Interações entre variáveis
@@ -188,16 +171,9 @@ class ModeloDengue:
         return df_ml
 
     def _split_seguro(self, X, y):
-        """
-        Faz split dos dados com verificação de classes
 
-        Args:
-            X: Features
-            y: Target
+        #Faz split dos dados com verificação de classes
 
-        Returns:
-            X_train, X_test, y_train, y_test
-        """
         class_counts = Counter(y)
         min_samples = min(class_counts.values())
 
@@ -222,15 +198,9 @@ class ModeloDengue:
             )
 
     def prever(self, dados_novos: pd.DataFrame) -> np.ndarray:
-        """
-        Faz predições com o melhor modelo
 
-        Args:
-            dados_novos: DataFrame com novos dados
+        #Faz predições com o melhor modelo
 
-        Returns:
-            Array com predições
-        """
         if self.melhor_modelo is None:
             raise ValueError("Nenhum modelo foi treinado ainda!")
 
@@ -257,7 +227,7 @@ class ModeloDengue:
         return float(self.resultados.iloc[0]['Acurácia'])
 
     def get_feature_importance(self) -> pd.DataFrame:
-        """Retorna importância das features (para modelos baseados em árvore)"""
+        #Retorna importância das features (para modelos baseados em árvore)
         if self.melhor_modelo is None:
             return pd.DataFrame()
 

@@ -1,8 +1,3 @@
-"""
-Módulo para integração com Open-Meteo API
-Dados climáticos históricos gratuitos e confiáveis
-"""
-
 import requests
 import pandas as pd
 import numpy as np
@@ -109,16 +104,8 @@ class OpenMeteoClient:
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def carregar_dados_openmeteo_estado(estado_nome: str, n_anos: int = 3) -> Optional[pd.DataFrame]:
-    """
-    Carrega dados climáticos do Open-Meteo
 
-    Args:
-        estado_nome: Nome do estado
-        n_anos: Número de anos de histórico
-
-    Returns:
-        DataFrame com dados mensais
-    """
+    #Carrega dados climáticos do Open-Meteo
 
     if estado_nome not in ESTADOS_BRASIL:
         st.error(f"❌ Estado {estado_nome} não encontrado")

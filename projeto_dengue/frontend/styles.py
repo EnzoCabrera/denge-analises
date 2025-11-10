@@ -1,7 +1,3 @@
-"""
-Estilos CSS da aplicação
-"""
-
 CSS_CUSTOM = """
     <style>
     .main {
@@ -26,6 +22,6 @@ CSS_CUSTOM = """
 
 
 def aplicar_estilos():
-    """Aplica estilos CSS customizados"""
+    #Aplica estilos CSS customizados
     import streamlit as st
     st.markdown(CSS_CUSTOM, unsafe_allow_html=True)

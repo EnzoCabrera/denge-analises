@@ -1,12 +1,6 @@
-"""
-Aplicação Principal - Dashboard de Predição de Dengue
-Autor: Enzo Cabrera (@EnzoCabrera)
-Data: 2025-10-31
-Versão: 2.0 - Com integração INMET
-"""
-
 import streamlit as st
 import pandas as pd
+from datetime import datetime
 
 # Imports dos módulos backend
 from backend.config import APP_INFO
@@ -23,17 +17,18 @@ from frontend.charts import (
     criar_grafico_casos_temporal, criar_grafico_clima,
     criar_grafico_risco_mensal, criar_grafico_distribuicao_risco,
     criar_grafico_correlacao, criar_grafico_tendencia_anual,
-    criar_grafico_modelos, criar_mapa_brasil
+    criar_grafico_modelos, criar_mapa_brasil,
+    criar_grafico_predicao_mes_atual,
+    criar_grafico_serie_temporal_com_predicao,
+    criar_grafico_comparacao_predicao_historico
 )
 from frontend.styles import aplicar_estilos
 
 # Imports dos utilitários
 from utils.helpers import preparar_dados_mapa, exportar_csv
 
-
-# =====================================================
-# CONFIGURAÇÃO DA PÁGINA
-# =====================================================
+# Imports de predição
+from backend.predicao import PredicaoDengue, obter_clima_atual_estimado
 
 st.set_page_config(
     page_title=APP_INFO['title'],
@@ -42,13 +37,8 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-
-# =====================================================
-# FUNÇÃO PRINCIPAL
-# =====================================================
-
 def main():
-    """Função principal da aplicação"""
+    #Função principal da aplicação
 
     # Aplicar estilos
     aplicar_estilos()
@@ -94,12 +84,13 @@ def main():
 
         st.markdown("---")
 
-        # Tabs com análises
-        tab1, tab2, tab3, tab4 = st.tabs([
+        # Tabs com análises (COM TAB DE PREDIÇÃO)
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
             "📈 Análise Temporal",
             "🌡️ Indicadores Climáticos",
             "🎯 Análise de Risco",
-            "🤖 Modelo Preditivo"
+            "🤖 Modelo Preditivo",
+            "🔮 Predição Mês Atual"
         ])
 
         # TAB 1: Análise Temporal
@@ -224,6 +215,116 @@ def main():
             except Exception as e:
                 st.dataframe(df_resultados, use_container_width=True)
 
+        # TAB 5: Predição do Mês Atual
+        with tab5:
+            st.markdown("### 🔮 Predição de Casos para o Mês Atual")
+
+            with st.spinner("🤖 Treinando modelo preditivo..."):
+                try:
+                    # Criar modelo de predição
+                    modelo_predicao = PredicaoDengue()
+
+                    # Treinar com dados históricos
+                    resultado_treino = modelo_predicao.treinar_modelo(df)
+
+                    # Obter clima atual (estimado)
+                    clima_atual = obter_clima_atual_estimado(estado_selecionado)
+
+                    # Fazer predição
+                    predicao = modelo_predicao.prever_mes_atual(df, clima_atual)
+
+                except Exception as e:
+                    st.error(f"❌ Erro na predição: {str(e)}")
+                    st.exception(e)
+
+            # Exibir resultados
+            if 'predicao' in locals():
+                # Card de destaque com predição
+                st.markdown(f"""
+                <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                            padding: 30px; border-radius: 15px; color: white; margin-bottom: 30px;'>
+                    <h2 style='margin: 0; color: white;'>🔮 Predição para {datetime.now().strftime('%B/%Y')}</h2>
+                    <hr style='border-color: rgba(255,255,255,0.3); margin: 20px 0;'>
+                    <div style='display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px;'>
+                        <div>
+                            <p style='margin: 0; opacity: 0.9; font-size: 14px;'>CASOS PREVISTOS</p>
+                            <h1 style='margin: 10px 0; font-size: 48px;'>{predicao['casos_previstos']:,}</h1>
+                            <p style='margin: 0; opacity: 0.8; font-size: 12px;'>
+                                Intervalo: {predicao['intervalo_inferior']:,} - {predicao['intervalo_superior']:,}
+                            </p>
+                        </div>
+                        <div>
+                            <p style='margin: 0; opacity: 0.9; font-size: 14px;'>RISCO PREVISTO</p>
+                            <h1 style='margin: 10px 0; font-size: 48px;'>{predicao['risco_previsto']}</h1>
+                            <p style='margin: 0; opacity: 0.8; font-size: 12px;'>
+                                Modelo: {predicao['modelo_usado']}
+                            </p>
+                        </div>
+                        <div>
+                            <p style='margin: 0; opacity: 0.9; font-size: 14px;'>VARIAÇÃO vs HISTÓRICO</p>
+                            <h1 style='margin: 10px 0; font-size: 48px;'>
+                                {predicao['variacao_percentual']:+.1f}%
+                            </h1>
+                            <p style='margin: 0; opacity: 0.8; font-size: 12px;'>
+                                Confiança (R²): {predicao['confianca']:.2%}
+                            </p>
+                        </div>
+                    </div>
+                    <div style='margin-top: 20px; padding: 15px; background: rgba(255,255,255,0.1); 
+                                border-radius: 10px; font-size: 16px;'>
+                        {predicao['alerta']}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                # Gráficos de predição
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    st.plotly_chart(
+                        criar_grafico_predicao_mes_atual(predicao, estado_selecionado),
+                        use_container_width=True
+                    )
+
+                with col2:
+                    st.plotly_chart(
+                        criar_grafico_comparacao_predicao_historico(predicao, df),
+                        use_container_width=True
+                    )
+
+                # Série temporal com predição
+                st.plotly_chart(
+                    criar_grafico_serie_temporal_com_predicao(df, predicao, estado_selecionado),
+                    use_container_width=True
+                )
+
+                # Métricas do modelo
+                st.markdown("---")
+                st.markdown("### 📊 Métricas do Modelo Preditivo")
+
+                col1, col2, col3 = st.columns(3)
+
+                with col1:
+                    st.metric("Modelo Usado", predicao['modelo_usado'])
+
+                with col2:
+                    st.metric("R² Score", f"{predicao['confianca']:.3f}")
+
+                with col3:
+                    mae = resultado_treino['mae']
+                    st.metric("Erro Médio (MAE)", f"{mae:.0f} casos")
+
+                # Tabela com resultados de treino
+                with st.expander("📈 Ver Desempenho de Todos os Modelos"):
+                    st.dataframe(
+                        resultado_treino['resultados'].style.format({
+                            'MAE': '{:.2f}',
+                            'R²': '{:.3f}',
+                            'RMSE': '{:.2f}'
+                        }),
+                        use_container_width=True
+                    )
+
         # Dados brutos (expansível)
         with st.expander("📋 Ver Dados Brutos"):
             try:
@@ -242,7 +343,7 @@ def main():
                 st.error(f"Erro ao exibir dados brutos: {str(e)}")
 
     else:
-        # Tela inicial (quando não foi executada análise)
+        # Tela inicial
         st.info("👈 Selecione um estado na barra lateral e clique em '🚀 Executar Análise Completa'")
 
         st.markdown("### 🗺️ Estados Disponíveis para Análise")
@@ -263,44 +364,39 @@ def main():
 
         with col1:
             st.markdown("""
-            ### 🌐 Dados do INMET
-            
-            O sistema utiliza dados climáticos **reais** da API do INMET:
+            ### 🌐 Dados Climáticos
+
+            Fonte: **Open-Meteo API**
             - ✅ Temperatura
             - ✅ Umidade
             - ✅ Precipitação
-            - ✅ Vento
+            - ✅ Dados históricos reais
             """)
 
         with col2:
             st.markdown("""
             ### 🤖 Machine Learning
-            
+
             Modelos disponíveis:
             - 📊 Naive Bayes
             - 🌳 Random Forest
             - 📈 Gradient Boosting
-            - 🚀 XGBoost (se disponível)
+            - 🚀 XGBoost
             """)
 
         with col3:
             st.markdown("""
-            ### 📊 Visualizações
-            
-            Gráficos interativos:
+            ### 🔮 Predição
+
+            Sistema preditivo:
             - 📈 Série temporal
-            - 🗺️ Mapa de calor
-            - 🎯 Distribuição de risco
-            - 🔬 Correlações
+            - 🎯 Predição mês atual
+            - 📊 Intervalo de confiança
+            - ⚠️ Alertas automáticos
             """)
 
     # Footer
     renderizar_footer()
-
-
-# =====================================================
-# PONTO DE ENTRADA
-# =====================================================
 
 if __name__ == "__main__":
     try:

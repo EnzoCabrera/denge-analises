@@ -1,13 +1,9 @@
-"""
-Componentes reutilizáveis da interface
-"""
-
 import streamlit as st
 from backend.config import ESTADOS_BRASIL, CORES_RISCO_EMOJI
 
 
 def renderizar_header():
-    """Renderiza o cabeçalho da aplicação"""
+    #Renderiza o cabeçalho da aplicação
     st.markdown("""
         <h1 style='text-align: center; color: #2c3e50;'>
             🦟 Sistema de Predição de Risco de Dengue
@@ -20,12 +16,9 @@ def renderizar_header():
 
 
 def renderizar_sidebar():
-    """
-    Renderiza a barra lateral com controles
 
-    Returns:
-        Tupla (estado_selecionado, n_anos, analisar, usar_dados_reais)
-    """
+    #Renderiza a barra lateral com controles
+
     with st.sidebar:
         st.image("https://cdn-icons-png.flaticon.com/512/3004/3004458.png", width=100)
         st.markdown("## 🎛️ Painel de Controle")
@@ -92,12 +85,9 @@ def renderizar_sidebar():
 
 
 def renderizar_kpis(stats: dict):
-    """
-    Renderiza os KPIs principais
 
-    Args:
-        stats: Dicionário com estatísticas
-    """
+    #Renderiza os KPIs principais
+
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
@@ -128,12 +118,9 @@ def renderizar_kpis(stats: dict):
 
 
 def renderizar_estatisticas_risco(df):
-    """
-    Renderiza estatísticas por nível de risco
 
-    Args:
-        df: DataFrame com dados
-    """
+    #Renderiza estatísticas por nível de risco
+
     st.markdown("### 📊 Estatísticas por Nível de Risco")
 
     for risco in ['Alto', 'Médio', 'Baixo']:
@@ -154,7 +141,7 @@ def renderizar_estatisticas_risco(df):
 
 
 def renderizar_footer():
-    """Renderiza o rodapé da aplicação"""
+    #Renderiza o rodapé da aplicação
     st.markdown("---")
     st.markdown(f"""
         <p style='text-align: center; color: #7f8c8d;'>
@@ -166,12 +153,8 @@ def renderizar_footer():
 
 
 def renderizar_ranking_modelos(df_resultados):
-    """
-    Renderiza ranking de modelos
+    #Renderiza ranking de modelos
 
-    Args:
-        df_resultados: DataFrame com resultados dos modelos
-    """
     st.markdown("### 🏆 Melhor Modelo")
     melhor = df_resultados.iloc[0]
     st.success(f"**{melhor['Modelo']}**")
@@ -203,13 +186,9 @@ def renderizar_ranking_modelos(df_resultados):
 
 
 def renderizar_info_dados(usar_dados_reais: bool, total_registros: int):
-    """
-    Renderiza informações sobre a fonte dos dados
 
-    Args:
-        usar_dados_reais: Se está usando dados reais
-        total_registros: Número total de registros
-    """
+    #Renderiza informações sobre a fonte dos dados
+
     if usar_dados_reais:
         st.info(f"""
         🌐 **Dados Climáticos REAIS do Open-Meteo**  

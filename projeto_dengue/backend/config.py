@@ -1,7 +1,3 @@
-"""
-Configurações e constantes do sistema
-"""
-
 # Estados do Brasil com coordenadas
 ESTADOS_BRASIL = {
     'Acre': {'sigla': 'AC', 'regiao': 'Norte', 'lat': -9.0238, 'lon': -70.8120},

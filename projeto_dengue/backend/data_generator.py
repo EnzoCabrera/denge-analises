@@ -1,8 +1,3 @@
-"""
-Módulo responsável pela geração/carregamento de dados
-Prioriza dados REAIS do Open-Meteo, fallback para simulação
-"""
-
 import pandas as pd
 import numpy as np
 import streamlit as st
@@ -13,17 +8,7 @@ from backend.api_openmeteo import carregar_dados_openmeteo_estado, simular_casos
 @st.cache_data
 def gerar_dados_estado(estado_nome: str, n_anos: int = 3,
                        usar_dados_reais: bool = True) -> pd.DataFrame:
-    """
-    Gera ou carrega dados para um estado
-
-    Args:
-        estado_nome: Nome do estado
-        n_anos: Número de anos
-        usar_dados_reais: Se True, tenta carregar do Open-Meteo
-
-    Returns:
-        DataFrame com dados climáticos e casos de dengue
-    """
+    #Gera ou carrega dados para um estado
 
     estado_info = ESTADOS_BRASIL[estado_nome]
     regiao = estado_info['regiao']
@@ -58,9 +43,9 @@ def gerar_dados_estado(estado_nome: str, n_anos: int = 3,
 
 
 def _multiplicar_amostras(df: pd.DataFrame, n_anos: int) -> pd.DataFrame:
-    """
-    Multiplica amostras para ter dados suficientes para ML
-    """
+
+    #Multiplica amostras para ter dados suficientes para ML
+
 
     amostras_por_mes = max(20, int(150 / n_anos))
     dados_expandidos = []
@@ -108,7 +93,7 @@ def _multiplicar_amostras(df: pd.DataFrame, n_anos: int) -> pd.DataFrame:
 
 
 def _gerar_dados_simulados(estado_nome: str, n_anos: int) -> pd.DataFrame:
-    """Gera dados completamente simulados (fallback)"""
+    #Gera dados completamente simulados (fallback)
 
     np.random.seed(42)
 
@@ -178,7 +163,7 @@ def _gerar_dados_simulados(estado_nome: str, n_anos: int) -> pd.DataFrame:
 
 
 def _calcular_score_risco(temp: float, umidade: float, precip: float, mes: int) -> int:
-    """Calcula score de risco"""
+    #Calcula score de risco
     score = 0
 
     if 25 <= temp <= 30: score += 3
@@ -200,7 +185,7 @@ def _calcular_score_risco(temp: float, umidade: float, precip: float, mes: int) 
 
 
 def _calcular_fatores_sazonais(mes: int) -> tuple:
-    """Calcula fatores sazonais"""
+    #Calcula fatores sazonais
     if mes in [12, 1, 2]:
         return 1.15, 1.5, 2.5
     elif mes in [3, 4]:
@@ -212,7 +197,7 @@ def _calcular_fatores_sazonais(mes: int) -> tuple:
 
 
 def calcular_estatisticas(df: pd.DataFrame) -> dict:
-    """Calcula estatísticas do dataset"""
+    #Calcula estatísticas do dataset
     df_agregado = df.groupby(['ano', 'mes', 'mes_nome', 'ano_mes']).agg({
         'casos_dengue': 'sum',
         'temperatura_media': 'mean',

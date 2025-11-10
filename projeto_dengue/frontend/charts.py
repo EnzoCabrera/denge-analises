@@ -1,7 +1,3 @@
-"""
-Módulo de visualizações e gráficos
-"""
-
 import pandas as pd
 import numpy as np
 import plotly.express as px
@@ -9,35 +5,33 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from backend.config import CORES_RISCO, MESES_NOMES
 
-
-# =====================================================
-# FUNÇÃO AUXILIAR DE AGREGAÇÃO
-# =====================================================
-
 def _agregar_por_mes(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Agrega dados por mês/ano (para visualização)
 
-    Args:
-        df: DataFrame com múltiplas amostras por mês
+    #Agrega dados por mês/ano (para visualização)
 
-    Returns:
-        DataFrame agregado
-    """
-    return df.groupby(['ano', 'mes', 'mes_nome', 'ano_mes', 'estado', 'sigla', 'regiao']).agg({
+    colunas_agrupar = ['ano', 'mes', 'mes_nome', 'ano_mes']
+    colunas_existentes = [col for col in colunas_agrupar if col in df.columns]
+
+    # Adicionar colunas opcionais se existirem
+    for col in ['estado', 'sigla', 'regiao']:
+        if col in df.columns:
+            colunas_existentes.append(col)
+
+    agg_dict = {
         'casos_dengue': 'sum',
         'temperatura_media': 'mean',
-        'temperatura_max': 'mean',
-        'temperatura_min': 'mean',
         'umidade_relativa': 'mean',
         'precipitacao': 'mean',
         'risco_dengue': lambda x: x.mode()[0] if len(x) > 0 else 'Médio'
-    }).reset_index()
+    }
 
+    # Adicionar colunas opcionais de temperatura
+    if 'temperatura_max' in df.columns:
+        agg_dict['temperatura_max'] = 'mean'
+    if 'temperatura_min' in df.columns:
+        agg_dict['temperatura_min'] = 'mean'
 
-# =====================================================
-# FUNÇÕES DE GRÁFICOS
-# =====================================================
+    return df.groupby(colunas_existentes).agg(agg_dict).reset_index()
 
 def criar_grafico_casos_temporal(df: pd.DataFrame, estado_nome: str) -> go.Figure:
     """Gráfico de casos de dengue ao longo do tempo"""
@@ -70,6 +64,49 @@ def criar_grafico_casos_temporal(df: pd.DataFrame, estado_nome: str) -> go.Figur
 
     return fig
 
+
+def criar_grafico_tendencia_anual(df: pd.DataFrame, estado_nome: str) -> go.Figure:
+    #Tendência de casos por ano
+
+    # AGREGAR DADOS
+    df_agg = _agregar_por_mes(df)
+
+    casos_ano = df_agg.groupby('ano')['casos_dengue'].sum().reset_index()
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Bar(
+        x=casos_ano['ano'],
+        y=casos_ano['casos_dengue'],
+        marker_color='#3498db',
+        text=casos_ano['casos_dengue'],
+        textposition='outside',
+        texttemplate='%{text:.0f}'
+    ))
+
+    # Linha de tendência (apenas se houver mais de 1 ano)
+    if len(casos_ano) > 1:
+        z = np.polyfit(casos_ano['ano'], casos_ano['casos_dengue'], 1)
+        p = np.poly1d(z)
+
+        fig.add_trace(go.Scatter(
+            x=casos_ano['ano'],
+            y=p(casos_ano['ano']),
+            mode='lines',
+            name='Tendência',
+            line=dict(color='red', width=2, dash='dash')
+        ))
+
+    fig.update_layout(
+        title=f'📊 Total de Casos por Ano - {estado_nome}',
+        xaxis_title='Ano',
+        yaxis_title='Total de Casos',
+        height=400,
+        template='plotly_white',
+        showlegend=True if len(casos_ano) > 1 else False
+    )
+
+    return fig
 
 def criar_grafico_clima(df: pd.DataFrame, estado_nome: str) -> go.Figure:
     """Gráfico com variáveis climáticas"""
@@ -126,68 +163,8 @@ def criar_grafico_clima(df: pd.DataFrame, estado_nome: str) -> go.Figure:
     return fig
 
 
-def criar_grafico_risco_mensal(df: pd.DataFrame, estado_nome: str) -> go.Figure:
-    """Heatmap de risco por mês/ano"""
-
-    # AGREGAR DADOS
-    df_agg = _agregar_por_mes(df)
-
-    pivot = df_agg.pivot_table(
-        values='casos_dengue',
-        index='mes_nome',
-        columns='ano',
-        aggfunc='sum'
-    )
-
-    pivot = pivot.reindex(MESES_NOMES)
-
-    fig = go.Figure(data=go.Heatmap(
-        z=pivot.values,
-        x=pivot.columns,
-        y=pivot.index,
-        colorscale='YlOrRd',
-        text=pivot.values,
-        texttemplate='%{text:.0f}',
-        textfont={"size": 12},
-        colorbar=dict(title="Casos")
-    ))
-
-    fig.update_layout(
-        title=f'🔥 Mapa de Calor - Casos de Dengue por Mês/Ano - {estado_nome}',
-        xaxis_title='Ano',
-        yaxis_title='Mês',
-        height=400,
-        template='plotly_white'
-    )
-
-    return fig
-
-
-def criar_grafico_distribuicao_risco(df: pd.DataFrame, estado_nome: str) -> go.Figure:
-    """Gráfico de pizza - distribuição de risco"""
-
-    risco_counts = df['risco_dengue'].value_counts()
-
-    fig = go.Figure(data=[go.Pie(
-        labels=risco_counts.index,
-        values=risco_counts.values,
-        hole=0.4,
-        marker=dict(colors=[CORES_RISCO[r] for r in risco_counts.index]),
-        textinfo='label+percent',
-        textfont_size=14
-    )])
-
-    fig.update_layout(
-        title=f'🎯 Distribuição de Risco - {estado_nome}',
-        height=400,
-        template='plotly_white'
-    )
-
-    return fig
-
-
 def criar_grafico_correlacao(df: pd.DataFrame, estado_nome: str) -> go.Figure:
-    """Correlação entre clima e casos de dengue"""
+    #Correlação entre clima e casos de dengue
 
     # Usar dados agregados se houver muitas amostras
     if len(df) > 100:
@@ -228,53 +205,68 @@ def criar_grafico_correlacao(df: pd.DataFrame, estado_nome: str) -> go.Figure:
 
     return fig
 
-
-def criar_grafico_tendencia_anual(df: pd.DataFrame, estado_nome: str) -> go.Figure:
-    """Tendência de casos por ano"""
+def criar_grafico_risco_mensal(df: pd.DataFrame, estado_nome: str) -> go.Figure:
+    #Heatmap de risco por mês/ano
 
     # AGREGAR DADOS
     df_agg = _agregar_por_mes(df)
 
-    casos_ano = df_agg.groupby('ano')['casos_dengue'].sum().reset_index()
+    pivot = df_agg.pivot_table(
+        values='casos_dengue',
+        index='mes_nome',
+        columns='ano',
+        aggfunc='sum'
+    )
 
-    fig = go.Figure()
+    pivot = pivot.reindex(MESES_NOMES)
 
-    fig.add_trace(go.Bar(
-        x=casos_ano['ano'],
-        y=casos_ano['casos_dengue'],
-        marker_color='#3498db',
-        text=casos_ano['casos_dengue'],
-        textposition='outside',
-        texttemplate='%{text:.0f}'
+    fig = go.Figure(data=go.Heatmap(
+        z=pivot.values,
+        x=pivot.columns,
+        y=pivot.index,
+        colorscale='YlOrRd',
+        text=pivot.values,
+        texttemplate='%{text:.0f}',
+        textfont={"size": 12},
+        colorbar=dict(title="Casos")
     ))
 
-    # Linha de tendência (apenas se houver mais de 1 ano)
-    if len(casos_ano) > 1:
-        z = np.polyfit(casos_ano['ano'], casos_ano['casos_dengue'], 1)
-        p = np.poly1d(z)
+    fig.update_layout(
+        title=f'🔥 Mapa de Calor - Casos de Dengue por Mês/Ano - {estado_nome}',
+        xaxis_title='Ano',
+        yaxis_title='Mês',
+        height=400,
+        template='plotly_white'
+    )
 
-        fig.add_trace(go.Scatter(
-            x=casos_ano['ano'],
-            y=p(casos_ano['ano']),
-            mode='lines',
-            name='Tendência',
-            line=dict(color='red', width=2, dash='dash')
-        ))
+    return fig
+
+
+def criar_grafico_distribuicao_risco(df: pd.DataFrame, estado_nome: str) -> go.Figure:
+    #Gráfico de pizza - distribuição de risco
+
+    risco_counts = df['risco_dengue'].value_counts()
+
+    fig = go.Figure(data=[go.Pie(
+        labels=risco_counts.index,
+        values=risco_counts.values,
+        hole=0.4,
+        marker=dict(colors=[CORES_RISCO[r] for r in risco_counts.index]),
+        textinfo='label+percent',
+        textfont_size=14
+    )])
 
     fig.update_layout(
-        title=f'📊 Total de Casos por Ano - {estado_nome}',
-        xaxis_title='Ano',
-        yaxis_title='Total de Casos',
+        title=f'🎯 Distribuição de Risco - {estado_nome}',
         height=400,
-        template='plotly_white',
-        showlegend=True if len(casos_ano) > 1 else False
+        template='plotly_white'
     )
 
     return fig
 
 
 def criar_grafico_modelos(df_resultados: pd.DataFrame) -> go.Figure:
-    """Gráfico de comparação de modelos"""
+    #Gráfico de comparação de modelos
 
     fig = go.Figure(data=[
         go.Bar(
@@ -296,9 +288,8 @@ def criar_grafico_modelos(df_resultados: pd.DataFrame) -> go.Figure:
 
     return fig
 
-
 def criar_mapa_brasil(estados_df: pd.DataFrame) -> go.Figure:
-    """Mapa do Brasil com estados"""
+    #Mapa do Brasil com estados
 
     fig = px.scatter_geo(
         estados_df,
@@ -317,6 +308,188 @@ def criar_mapa_brasil(estados_df: pd.DataFrame) -> go.Figure:
         showcountries=True,
         showland=True,
         landcolor='lightgray'
+    )
+
+    return fig
+
+def criar_grafico_predicao_mes_atual(predicao: dict, estado_nome: str) -> go.Figure:
+
+    #Gráfico de predição para o mês atual
+
+    from datetime import datetime
+    mes_atual_nome = datetime.now().strftime('%B/%Y')
+
+    # Cores baseadas no risco
+    cores = {
+        'Alto': '#e74c3c',
+        'Médio': '#f39c12',
+        'Baixo': '#27ae60'
+    }
+    cor = cores.get(predicao['risco_previsto'], '#3498db')
+
+    fig = go.Figure()
+
+    # Barra histórica
+    fig.add_trace(go.Bar(
+        x=['Histórico<br>Média'],
+        y=[predicao['casos_historicos_media']],
+        name='Histórico',
+        marker_color='#95a5a6',
+        text=[f"{predicao['casos_historicos_media']}"],
+        textposition='outside'
+    ))
+
+    # Barra de predição com intervalo de confiança
+    fig.add_trace(go.Bar(
+        x=['Predição<br>Atual'],
+        y=[predicao['casos_previstos']],
+        name='Predição',
+        marker_color=cor,
+        text=[f"{predicao['casos_previstos']}"],
+        textposition='outside',
+        error_y=dict(
+            type='data',
+            symmetric=False,
+            array=[predicao['intervalo_superior'] - predicao['casos_previstos']],
+            arrayminus=[predicao['casos_previstos'] - predicao['intervalo_inferior']],
+            color='rgba(0,0,0,0.3)'
+        )
+    ))
+
+    fig.update_layout(
+        title=f'🔮 Predição de Casos de Dengue - {mes_atual_nome} - {estado_nome}',
+        yaxis_title='Número de Casos',
+        showlegend=True,
+        height=400,
+        template='plotly_white'
+    )
+
+    return fig
+
+
+def criar_grafico_serie_temporal_com_predicao(df_historico: pd.DataFrame,
+                                              predicao: dict,
+                                              estado_nome: str) -> go.Figure:
+
+    #Série temporal histórica + predição do mês atual
+
+
+    from datetime import datetime
+
+    # Agregar histórico por mês
+    df_agg = df_historico.groupby(['ano', 'mes', 'ano_mes']).agg({
+        'casos_dengue': 'sum'
+    }).reset_index()
+
+    # Últimos 12 meses
+    df_ultimos_12 = df_agg.tail(12)
+
+    fig = go.Figure()
+
+    # Linha histórica
+    fig.add_trace(go.Scatter(
+        x=df_ultimos_12['ano_mes'],
+        y=df_ultimos_12['casos_dengue'],
+        mode='lines+markers',
+        name='Histórico',
+        line=dict(color='#3498db', width=3),
+        marker=dict(size=8)
+    ))
+
+    # Ponto de predição
+    mes_atual = datetime.now().strftime('%Y-%m')
+
+    fig.add_trace(go.Scatter(
+        x=[mes_atual],
+        y=[predicao['casos_previstos']],
+        mode='markers',
+        name='Predição',
+        marker=dict(
+            size=15,
+            color='#e74c3c',
+            symbol='star',
+            line=dict(color='white', width=2)
+        ),
+        error_y=dict(
+            type='data',
+            symmetric=False,
+            array=[predicao['intervalo_superior'] - predicao['casos_previstos']],
+            arrayminus=[predicao['casos_previstos'] - predicao['intervalo_inferior']],
+            color='rgba(231, 76, 60, 0.3)',
+            thickness=2
+        )
+    ))
+
+    fig.update_layout(
+        title=f'📈 Série Temporal com Predição - {estado_nome}',
+        xaxis_title='Período',
+        yaxis_title='Casos de Dengue',
+        hovermode='x unified',
+        height=400,
+        template='plotly_white'
+    )
+
+    return fig
+
+
+def criar_grafico_comparacao_predicao_historico(predicao: dict,
+                                                df_historico: pd.DataFrame) -> go.Figure:
+
+    #Compara predição com mesmos meses históricos
+
+
+    from datetime import datetime
+    mes_atual = datetime.now().month
+
+    # Filtrar histórico do mesmo mês
+    df_mesmo_mes = df_historico[df_historico['mes'] == mes_atual]
+
+    # Agrupar por ano
+    casos_por_ano = df_mesmo_mes.groupby('ano')['casos_dengue'].sum().reset_index()
+
+    fig = go.Figure()
+
+    # Barras históricas
+    fig.add_trace(go.Bar(
+        x=casos_por_ano['ano'].astype(str),
+        y=casos_por_ano['casos_dengue'],
+        name='Histórico',
+        marker_color='#95a5a6'
+    ))
+
+    # Barra de predição
+    fig.add_trace(go.Bar(
+        x=['2025 (Predição)'],
+        y=[predicao['casos_previstos']],
+        name='Predição 2025',
+        marker_color='#e74c3c',
+        error_y=dict(
+            type='data',
+            symmetric=False,
+            array=[predicao['intervalo_superior'] - predicao['casos_previstos']],
+            arrayminus=[predicao['casos_previstos'] - predicao['intervalo_inferior']]
+        )
+    ))
+
+    # Linha de média histórica
+    if len(casos_por_ano) > 0:
+        media_historica = casos_por_ano['casos_dengue'].mean()
+
+        fig.add_hline(
+            y=media_historica,
+            line_dash="dash",
+            line_color="orange",
+            annotation_text=f"Média Histórica: {int(media_historica)}",
+            annotation_position="top left"
+        )
+
+    fig.update_layout(
+        title=f'📊 Comparação: Mesmo Mês em Anos Anteriores',
+        xaxis_title='Ano',
+        yaxis_title='Casos de Dengue',
+        showlegend=True,
+        height=400,
+        template='plotly_white'
     )
 
     return fig
