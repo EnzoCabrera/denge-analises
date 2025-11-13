@@ -223,13 +223,13 @@ def simular_casos_dengue(df_clima: pd.DataFrame, regiao: str) -> pd.DataFrame:
         # Classificar risco
         if score >= 7:
             risco = 'Alto'
-            casos_base = params['casos_base'] * 2.0
+            casos_base = params['casos_base'] * 5.0
         elif score >= 4:
             risco = 'Médio'
-            casos_base = params['casos_base'] * 1.0
+            casos_base = params['casos_base'] * 1.5
         else:
             risco = 'Baixo'
-            casos_base = params['casos_base'] * 0.3
+            casos_base = params['casos_base'] * 0.2
 
         # Gerar casos com variação
         casos = int(np.random.normal(casos_base, casos_base * 0.25))

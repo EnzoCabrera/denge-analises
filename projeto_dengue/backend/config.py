@@ -31,35 +31,50 @@ ESTADOS_BRASIL = {
 
 # Parâmetros climáticos por região
 PARAMETROS_CLIMA = {
+    'Sudeste': {
+        'temp_base': 24,
+        'umidade_base': 70,
+        'precip_base': 130,
+        'casos_base': 8000,  # ~8k casos/mês (realista)
+        'temp_var': 5,
+        'umidade_var': 15,
+        'precip_var': 80
+    },
     'Norte': {
-        'temp_base': 27, 'temp_var': 3,
-        'umidade_base': 80, 'umidade_var': 10,
-        'precip_base': 200, 'precip_var': 100,
-        'casos_base': 150
+        'temp_base': 27,
+        'umidade_base': 80,
+        'precip_base': 200,
+        'casos_base': 5000,
+        'temp_var': 3,
+        'umidade_var': 10,
+        'precip_var': 100
     },
     'Nordeste': {
-        'temp_base': 28, 'temp_var': 4,
-        'umidade_base': 70, 'umidade_var': 15,
-        'precip_base': 100, 'precip_var': 80,
-        'casos_base': 120
+        'temp_base': 28,
+        'umidade_base': 70,
+        'precip_base': 100,
+        'casos_base': 6000,
+        'temp_var': 4,
+        'umidade_var': 12,
+        'precip_var': 70
     },
     'Centro-Oeste': {
-        'temp_base': 26, 'temp_var': 4,
-        'umidade_base': 65, 'umidade_var': 15,
-        'precip_base': 150, 'precip_var': 90,
-        'casos_base': 100
-    },
-    'Sudeste': {
-        'temp_base': 24, 'temp_var': 5,
-        'umidade_base': 70, 'umidade_var': 12,
-        'precip_base': 130, 'precip_var': 70,
-        'casos_base': 200
+        'temp_base': 26,
+        'umidade_base': 65,
+        'precip_base': 150,
+        'casos_base': 4000,
+        'temp_var': 4,
+        'umidade_var': 15,
+        'precip_var': 90
     },
     'Sul': {
-        'temp_base': 20, 'temp_var': 6,
-        'umidade_base': 75, 'umidade_var': 10,
-        'precip_base': 140, 'precip_var': 60,
-        'casos_base': 60
+        'temp_base': 20,
+        'umidade_base': 75,
+        'precip_base': 140,
+        'casos_base': 2000,
+        'temp_var': 5,
+        'umidade_var': 12,
+        'precip_var': 70
     }
 }
 

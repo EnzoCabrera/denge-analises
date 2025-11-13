@@ -71,11 +71,16 @@ def main():
                 st.exception(e)
                 return
 
-        # Informação sobre fonte de dados
+        # Informação sobre fonte de dados (antiga)
         renderizar_info_dados(
             st.session_state.get('dados_reais', False),
             st.session_state.get('total_registros', 0)
         )
+
+        st.markdown("---")
+
+        from frontend.components import renderizar_fonte_dados
+        renderizar_fonte_dados(df)
 
         st.markdown("---")
 
@@ -182,6 +187,21 @@ def main():
                     st.exception(e)
                     return
 
+            # =====================================================
+            # EXIBIR TIPO DE MODELO USADO
+            # =====================================================
+
+            if modelo.tipo_modelo == 'regressao':
+                st.info("""
+                ℹ️ **Modelo de Regressão Ativado**
+
+                Como os dados apresentam apenas uma classe de risco ou poucos dados,
+                o sistema está usando **modelos de regressão** para prever o **número de casos**
+                em vez da classificação de risco.
+                """)
+
+            # =====================================================
+
             col1, col2 = st.columns([2, 1])
 
             with col1:
@@ -204,14 +224,25 @@ def main():
             st.markdown("### 📊 Métricas Detalhadas")
 
             try:
-                st.dataframe(
-                    df_resultados.style.format({
-                        'Acurácia': '{:.2%}',
-                        'F1-Score': '{:.3f}',
-                        'CV Acurácia': '{:.2%}'
-                    }),
-                    use_container_width=True
-                )
+                # Formatar baseado no tipo de modelo
+                if modelo.tipo_modelo == 'regressao':
+                    st.dataframe(
+                        df_resultados.style.format({
+                            'Acurácia': '{:.2%}',
+                            'R²': '{:.3f}',
+                            'MAE': '{:.1f}'
+                        }),
+                        use_container_width=True
+                    )
+                else:
+                    st.dataframe(
+                        df_resultados.style.format({
+                            'Acurácia': '{:.2%}',
+                            'F1-Score': '{:.3f}',
+                            'CV Acurácia': '{:.2%}'
+                        }),
+                        use_container_width=True
+                    )
             except Exception as e:
                 st.dataframe(df_resultados, use_container_width=True)
 
@@ -238,8 +269,27 @@ def main():
                     st.exception(e)
 
             # Exibir resultados
+            # Exibir resultados
             if 'predicao' in locals():
-                # Card de destaque com predição
+
+                # Total de amostras por mês no dataset
+                df_mes_atual = df[df['mes'] == datetime.now().month]
+                n_amostras_mes = len(df_mes_atual)
+                n_anos_dados = len(df['ano'].unique())
+
+                # Casos agregados (soma de todas as localidades simuladas)
+                casos_agregados_mes = df_mes_atual.groupby('ano')['casos_dengue'].sum().mean()
+
+                # Escalar predição para ser comparável
+                if n_anos_dados > 0:
+                    amostras_por_mes = n_amostras_mes / n_anos_dados
+                else:
+                    amostras_por_mes = 1
+
+                casos_previstos_total = int(predicao['casos_previstos'] * amostras_por_mes)
+                intervalo_inf_total = int(predicao['intervalo_inferior'] * amostras_por_mes)
+                intervalo_sup_total = int(predicao['intervalo_superior'] * amostras_por_mes)
+
                 st.markdown(f"""
                 <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
                             padding: 30px; border-radius: 15px; color: white; margin-bottom: 30px;'>
@@ -247,10 +297,10 @@ def main():
                     <hr style='border-color: rgba(255,255,255,0.3); margin: 20px 0;'>
                     <div style='display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px;'>
                         <div>
-                            <p style='margin: 0; opacity: 0.9; font-size: 14px;'>CASOS PREVISTOS</p>
-                            <h1 style='margin: 10px 0; font-size: 48px;'>{predicao['casos_previstos']:,}</h1>
+                            <p style='margin: 0; opacity: 0.9; font-size: 14px;'>CASOS PREVISTOS (TOTAL)</p>
+                            <h1 style='margin: 10px 0; font-size: 48px;'>{casos_previstos_total:,}</h1>
                             <p style='margin: 0; opacity: 0.8; font-size: 12px;'>
-                                Intervalo: {predicao['intervalo_inferior']:,} - {predicao['intervalo_superior']:,}
+                                Intervalo: {intervalo_inf_total:,} - {intervalo_sup_total:,}
                             </p>
                         </div>
                         <div>
@@ -263,7 +313,7 @@ def main():
                         <div>
                             <p style='margin: 0; opacity: 0.9; font-size: 14px;'>VARIAÇÃO vs HISTÓRICO</p>
                             <h1 style='margin: 10px 0; font-size: 48px;'>
-                                {predicao['variacao_percentual']:+.1f}%
+                                {((casos_previstos_total - casos_agregados_mes) / casos_agregados_mes * 100):+.1f}%
                             </h1>
                             <p style='margin: 0; opacity: 0.8; font-size: 12px;'>
                                 Confiança (R²): {predicao['confianca']:.2%}
@@ -273,6 +323,11 @@ def main():
                     <div style='margin-top: 20px; padding: 15px; background: rgba(255,255,255,0.1); 
                                 border-radius: 10px; font-size: 16px;'>
                         {predicao['alerta']}
+                    </div>
+                    <div style='margin-top: 15px; padding: 15px; background: rgba(255,255,255,0.05); 
+                                border-radius: 10px; font-size: 14px; opacity: 0.9;'>
+                        💡 <b>Metodologia:</b> Predição baseada em {int(amostras_por_mes)} localidades simuladas | 
+                        Média histórica: <b>{int(casos_agregados_mes):,}</b> casos/mês
                     </div>
                 </div>
                 """, unsafe_allow_html=True)

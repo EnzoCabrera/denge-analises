@@ -435,14 +435,16 @@ def criar_grafico_serie_temporal_com_predicao(df_historico: pd.DataFrame,
 def criar_grafico_comparacao_predicao_historico(predicao: dict,
                                                 df_historico: pd.DataFrame) -> go.Figure:
 
-    #Compara predição com mesmos meses históricos
-
-
     from datetime import datetime
     mes_atual = datetime.now().month
 
+    # Agregar dados por mês/ano (somar casos de todas as localidades)
+    df_agregado = df_historico.groupby(['ano', 'mes']).agg({
+        'casos_dengue': 'sum'
+    }).reset_index()
+
     # Filtrar histórico do mesmo mês
-    df_mesmo_mes = df_historico[df_historico['mes'] == mes_atual]
+    df_mesmo_mes = df_agregado[df_agregado['mes'] == mes_atual]
 
     # Agrupar por ano
     casos_por_ano = df_mesmo_mes.groupby('ano')['casos_dengue'].sum().reset_index()
@@ -450,24 +452,35 @@ def criar_grafico_comparacao_predicao_historico(predicao: dict,
     fig = go.Figure()
 
     # Barras históricas
-    fig.add_trace(go.Bar(
-        x=casos_por_ano['ano'].astype(str),
-        y=casos_por_ano['casos_dengue'],
-        name='Histórico',
-        marker_color='#95a5a6'
-    ))
+    if len(casos_por_ano) > 0:
+        fig.add_trace(go.Bar(
+            x=casos_por_ano['ano'].astype(str),
+            y=casos_por_ano['casos_dengue'],
+            name='Histórico',
+            marker_color='#95a5a6',
+            text=casos_por_ano['casos_dengue'].apply(lambda x: f'{int(x):,}'),
+            textposition='outside'
+        ))
+
+    # Calcular fator de escala (quantas "localidades" temos no histórico)
+    n_registros_por_mes = len(df_historico[df_historico['mes'] == mes_atual]) / len(df_historico['ano'].unique())
+
+    # Se temos 50 amostras por mês, a predição deve ser multiplicada por 50
+    casos_previstos_escalados = int(predicao['casos_previstos'] * n_registros_por_mes)
 
     # Barra de predição
     fig.add_trace(go.Bar(
         x=['2025 (Predição)'],
-        y=[predicao['casos_previstos']],
+        y=[casos_previstos_escalados],
         name='Predição 2025',
         marker_color='#e74c3c',
+        text=[f'{casos_previstos_escalados:,}'],
+        textposition='outside',
         error_y=dict(
             type='data',
             symmetric=False,
-            array=[predicao['intervalo_superior'] - predicao['casos_previstos']],
-            arrayminus=[predicao['casos_previstos'] - predicao['intervalo_inferior']]
+            array=[(predicao['intervalo_superior'] - predicao['casos_previstos']) * n_registros_por_mes],
+            arrayminus=[(predicao['casos_previstos'] - predicao['intervalo_inferior']) * n_registros_por_mes]
         )
     ))
 
@@ -479,7 +492,7 @@ def criar_grafico_comparacao_predicao_historico(predicao: dict,
             y=media_historica,
             line_dash="dash",
             line_color="orange",
-            annotation_text=f"Média Histórica: {int(media_historica)}",
+            annotation_text=f"Média Histórica: {int(media_historica):,}",
             annotation_position="top left"
         )
 

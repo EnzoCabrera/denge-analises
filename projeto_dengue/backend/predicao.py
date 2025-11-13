@@ -150,7 +150,6 @@ class PredicaoDengue:
                          clima_atual: dict) -> dict:
         #Prevê casos de dengue para o mês atual
 
-
         if self.modelo is None:
             raise ValueError("Modelo não foi treinado ainda!")
 
@@ -169,8 +168,8 @@ class PredicaoDengue:
         ultimos_3_meses = df_historico.tail(3)['casos_dengue'].mean()
         df_atual['media_movel_3m'] = ultimos_3_meses
 
-        # Tendência (continuar do histórico)
-        df_atual['tendencia'] = 1.0  # Fim da tendência
+        # Tendência
+        df_atual['tendencia'] = 1.0
 
         # Normalizar
         X_atual = df_atual[self.features]
@@ -179,38 +178,111 @@ class PredicaoDengue:
         # Predizer
         predicao = self.modelo.predict(X_atual_scaled)[0]
 
-        # Intervalo de confiança (estimativa baseada no MAE)
+        # Intervalo de confiança
         intervalo_inferior = max(0, predicao - 1.96 * self.mae)
         intervalo_superior = predicao + 1.96 * self.mae
 
-        # Classificar risco baseado na predição
         casos_previstos = int(predicao)
 
-        # Obter média histórica do mês
-        mes_atual = clima_atual['mes']
-        casos_historicos_mes = df_historico[df_historico['mes'] == mes_atual]['casos_dengue'].mean()
+        temp = clima_atual['temperatura_media']
+        umidade = clima_atual['umidade_relativa']
+        precip = clima_atual['precipitacao']
+        mes = clima_atual['mes']
 
-        # Comparar com histórico
-        if casos_previstos > casos_historicos_mes * 1.5:
-            risco_previsto = 'Alto'
-            alerta = '🔴 ALERTA: Casos esperados acima da média histórica!'
-        elif casos_previstos > casos_historicos_mes * 1.2:
-            risco_previsto = 'Médio'
-            alerta = '🟡 ATENÇÃO: Casos ligeiramente elevados'
+        # Calcular SCORE CLIMÁTICO (0-12 pontos)
+        score_climatico = 0
+
+        # Temperatura (0-3 pontos)
+        if 25 <= temp <= 30:
+            score_climatico += 3
+        elif 20 <= temp <= 35:
+            score_climatico += 2
+        elif temp > 18:
+            score_climatico += 1
+
+        # Umidade (0-3 pontos)
+        if umidade > 80:
+            score_climatico += 3
+        elif umidade > 70:
+            score_climatico += 2
+        elif umidade > 60:
+            score_climatico += 1
+
+        # Precipitação (0-3 pontos)
+        if precip > 150:
+            score_climatico += 3
+        elif precip > 100:
+            score_climatico += 2
+        elif precip > 50:
+            score_climatico += 1
+
+        # Sazonalidade (0-3 pontos) ← AUMENTADO DE 2 PARA 3
+        if mes in [12, 1, 2, 3]:  # Verão (ALTÍSSIMO RISCO)
+            score_climatico += 3
+        elif mes in [10, 11]:  # Primavera (ALTO RISCO)
+            score_climatico += 2
+        elif mes in [4, 5]:  # Outono
+            score_climatico += 1
+
+        # Obter média histórica do mês (AGREGADA)
+        mes_atual = clima_atual['mes']
+        df_historico_mes = df_historico[df_historico['mes'] == mes_atual]
+
+        # Calcular total por ano
+        casos_por_ano = df_historico_mes.groupby('ano')['casos_dengue'].sum()
+        casos_historicos_mes = casos_por_ano.mean()
+
+        # Escalar predição para comparar
+        n_amostras = len(df_historico_mes) / len(df_historico['ano'].unique())
+        casos_previstos_escalados = predicao * n_amostras
+
+        # Calcular variação percentual
+        variacao_percentual = ((casos_previstos_escalados - casos_historicos_mes) / casos_historicos_mes * 100)
+
+        # CLASSIFICAÇÃO HÍBRIDA (Score Climático + Casos Previstos)
+
+        # 1. Se score climático for ALTO (>= 8)
+        if score_climatico >= 8:
+            # Condições muito favoráveis
+            if variacao_percentual > -30:  # Mesmo abaixo, se clima for crítico
+                risco_previsto = 'Alto'
+                alerta = '🔴 ALERTA: Condições climáticas críticas!'
+            else:
+                risco_previsto = 'Médio'
+                alerta = '🟡 ATENÇÃO: Clima favorável, mas casos muito abaixo do esperado'
+
+        elif score_climatico >= 5:
+            # Condições moderadas
+            if variacao_percentual > 20:
+                risco_previsto = 'Alto'
+                alerta = '🔴 ALERTA: Casos previstos muito acima da média!'
+            elif variacao_percentual > -20:
+                risco_previsto = 'Médio'
+                alerta = '🟡 ATENÇÃO: Casos dentro da faixa esperada'
+            else:
+                risco_previsto = 'Baixo'
+                alerta = '🟢 Normal: Casos abaixo da média'
+
         else:
-            risco_previsto = 'Baixo'
-            alerta = '🟢 Normal: Dentro do esperado'
+            # Condições desfavoráveis
+            if variacao_percentual > 50:
+                risco_previsto = 'Médio'
+                alerta = '🟡 ATENÇÃO: Casos elevados apesar de clima desfavorável'
+            else:
+                risco_previsto = 'Baixo'
+                alerta = '🟢 Normal: Clima e casos dentro do esperado'
 
         return {
-            'casos_previstos': casos_previstos,
+            'casos_previstos': int(predicao),  # ← Individual
             'intervalo_inferior': int(intervalo_inferior),
             'intervalo_superior': int(intervalo_superior),
             'risco_previsto': risco_previsto,
             'alerta': alerta,
             'confianca': self.r2,
             'modelo_usado': self.melhor_modelo_nome,
-            'casos_historicos_media': int(casos_historicos_mes),
-            'variacao_percentual': ((casos_previstos - casos_historicos_mes) / casos_historicos_mes * 100)
+            'casos_historicos_media': int(casos_historicos_mes),  # ← Agregado
+            'variacao_percentual': variacao_percentual,
+            'score_climatico': score_climatico
         }
 
     def prever_proximos_meses(self, df_historico: pd.DataFrame,

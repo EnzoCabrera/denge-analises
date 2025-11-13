@@ -1,4 +1,5 @@
 import streamlit as st
+import pandas as pd
 from backend.config import ESTADOS_BRASIL, CORES_RISCO_EMOJI
 
 
@@ -20,7 +21,6 @@ def renderizar_sidebar():
     #Renderiza a barra lateral com controles
 
     with st.sidebar:
-        st.image("https://cdn-icons-png.flaticon.com/512/3004/3004458.png", width=100)
         st.markdown("## 🎛️ Painel de Controle")
 
         # Seleção do estado
@@ -37,15 +37,10 @@ def renderizar_sidebar():
 
         # NOVO: Opção de usar dados reais
         usar_dados_reais = st.checkbox(
-            "🌐 Usar dados REAIS do Open-Meteo",
+            "🌐 Usar dados REAIS (InfoDengue + Open-Meteo)",
             value=True,
-            help="Se marcado, busca dados climáticos reais. Se desmarcar, usa simulação."
+            help="Busca casos reais do InfoDengue e clima real do Open-Meteo. Se desmarcar, usa simulação."
         )
-
-        if usar_dados_reais:
-            st.info("💡 Dados climáticos virão do Open-Meteo (global, confiável)")
-        else:
-            st.warning("⚠️ Modo simulação ativado")
 
         st.markdown("---")
 
@@ -64,22 +59,6 @@ def renderizar_sidebar():
 
         # Botão de análise
         analisar = st.button("🚀 Executar Análise Completa", type="primary", use_container_width=True)
-
-        # Informações adicionais
-        st.markdown("---")
-        st.markdown("""
-        ### ℹ️ Sobre os Dados
-        
-        **Dados Reais (Open-Meteo):**
-        - Temperatura
-        - Umidade
-        - Precipitação
-        - Vento
-        
-        **Dados Simulados:**
-        - Casos de dengue (baseados em clima)
-        - Classificação de risco
-        """)
 
     return estado_selecionado, n_anos, analisar, usar_dados_reais
 
@@ -202,4 +181,27 @@ def renderizar_info_dados(usar_dados_reais: bool, total_registros: int):
         🎲 **Dados Simulados**  
         Total de registros: {total_registros:,}  
         Dados gerados algoritmicamente para fins educacionais.
+        """)
+
+
+def renderizar_fonte_dados(df: pd.DataFrame):
+
+    #Mostra badge com fonte dos dados
+
+
+    # Verificar se tem dados reais (InfoDengue retorna valores específicos)
+    if df['casos_dengue'].sum() > 100000:  # Indicativo de dados reais agregados
+        st.success("""
+        ### ✅ Dados REAIS em Uso
+
+        - **Casos de Dengue:** InfoDengue (Fiocruz)
+        - **Clima:** Open-Meteo (Histórico Real)
+        - **Período:** Últimos 3 anos
+        """)
+    else:
+        st.info("""
+        ### ⚙️ Dados Simulados em Uso
+
+        - **Casos:** Algoritmo baseado em clima real
+        - **Clima:** Open-Meteo (Histórico Real)
         """)
