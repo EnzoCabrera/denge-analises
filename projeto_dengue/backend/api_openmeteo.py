@@ -102,42 +102,68 @@ class OpenMeteoClient:
         return df
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def carregar_dados_openmeteo_estado(estado_nome: str, n_anos: int = 3) -> Optional[pd.DataFrame]:
 
-    #Carrega dados climáticos do Open-Meteo
+def carregar_dados_openmeteo_estado(estado_nome: str, n_anos: int = 3) -> Optional[pd.DataFrame]:
+    """
+    Carrega dados climáticos REAIS do Open-Meteo
+    """
 
     if estado_nome not in ESTADOS_BRASIL:
-        st.error(f"❌ Estado {estado_nome} não encontrado")
+        st.warning(f"⚠️ Estado '{estado_nome}' não encontrado")
         return None
 
-    # Obter coordenadas da capital do estado
     estado_info = ESTADOS_BRASIL[estado_nome]
-    latitude = estado_info['lat']
-    longitude = estado_info['lon']
 
-    # Calcular período
-    data_fim = datetime(2025, 10, 30)  # Data fixa para consistência
-    data_inicio = data_fim - timedelta(days=365 * n_anos)
+    from datetime import datetime
 
-    data_inicio_str = data_inicio.strftime('%Y-%m-%d')
-    data_fim_str = data_fim.strftime('%Y-%m-%d')
+    data_atual = datetime.now()
+    ano_atual = data_atual.year
+    ano_inicio = ano_atual - n_anos
 
-    st.info(f"📍 Local: {estado_nome} (Lat: {latitude:.2f}, Lon: {longitude:.2f})")
+    start_date = f"{ano_inicio}-01-01"
+    end_date = data_atual.strftime('%Y-%m-%d')
+
+    # =====================================================
+    # CORREÇÃO: Usar chaves corretas
+    # =====================================================
+
+    # Verificar qual chave existe
+    if 'latitude' in estado_info:
+        lat = estado_info['latitude']
+        lon = estado_info['longitude']
+    elif 'lat' in estado_info:
+        lat = estado_info['lat']
+        lon = estado_info['lon']
+    else:
+        st.error(f"❌ Coordenadas não encontradas para {estado_nome}")
+        return None
+
+    st.info(f"🌐 Buscando dados climáticos REAIS para **{estado_nome}**")
+    st.info(f"📅 Período: **Janeiro/{ano_inicio}** a **{data_atual.strftime('%B/%Y')}**")
+    st.info(f"📍 Coordenadas: Lat {lat}, Lon {lon}")
 
     # Buscar dados
     client = OpenMeteoClient()
-    df_clima = client.buscar_dados_climaticos(latitude, longitude,
-                                              data_inicio_str, data_fim_str)
+
+    df_clima = client.buscar_dados_climaticos(
+        latitude=lat,
+        longitude=lon,
+        data_inicio=start_date,
+        data_fim=end_date
+    )
 
     if df_clima is None or len(df_clima) == 0:
-        st.error("❌ Falha ao obter dados do Open-Meteo")
+        st.warning("⚠️ Falha ao obter dados climáticos do Open-Meteo")
         return None
 
     # Agregar por mês
     df_mensal = _agregar_dados_mensais(df_clima)
 
-    st.success(f"✅ {len(df_mensal)} meses de dados processados")
+    if len(df_mensal) == 0:
+        st.error("❌ Nenhum dado após agregação mensal")
+        return None
+
+    st.success(f"✅ {len(df_mensal)} meses de dados climáticos processados")
 
     return df_mensal
 
@@ -168,79 +194,3 @@ def _agregar_dados_mensais(df: pd.DataFrame) -> pd.DataFrame:
     df_mensal['temperatura_media'] = df_mensal['temperatura_media'].clip(10, 45)
 
     return df_mensal
-
-
-def simular_casos_dengue(df_clima: pd.DataFrame, regiao: str) -> pd.DataFrame:
-    """Simula casos de dengue baseado em dados climáticos REAIS"""
-
-    from backend.config import PARAMETROS_CLIMA, MESES_NOMES
-
-    df = df_clima.copy()
-    params = PARAMETROS_CLIMA.get(regiao, PARAMETROS_CLIMA['Sudeste'])
-
-    casos_lista = []
-    riscos_lista = []
-
-    for _, row in df.iterrows():
-        temp = row['temperatura_media']
-        umidade = row['umidade_relativa']
-        precip = row['precipitacao']
-        mes = row['mes']
-
-        # Calcular score de risco
-        score = 0
-
-        # Temperatura ótima: 25-30°C
-        if 25 <= temp <= 30:
-            score += 3
-        elif 20 <= temp <= 35:
-            score += 2
-        elif temp > 18:
-            score += 1
-
-        # Umidade ideal: >70%
-        if umidade > 80:
-            score += 3
-        elif umidade > 70:
-            score += 2
-        elif umidade > 60:
-            score += 1
-
-        # Precipitação
-        if precip > 150:
-            score += 3
-        elif precip > 100:
-            score += 2
-        elif precip > 50:
-            score += 1
-
-        # Sazonalidade (verão/primavera)
-        if mes in [12, 1, 2, 3]:
-            score += 2
-        elif mes in [10, 11]:
-            score += 1
-
-        # Classificar risco
-        if score >= 7:
-            risco = 'Alto'
-            casos_base = params['casos_base'] * 5.0
-        elif score >= 4:
-            risco = 'Médio'
-            casos_base = params['casos_base'] * 1.5
-        else:
-            risco = 'Baixo'
-            casos_base = params['casos_base'] * 0.2
-
-        # Gerar casos com variação
-        casos = int(np.random.normal(casos_base, casos_base * 0.25))
-        casos = max(10, casos)
-
-        casos_lista.append(casos)
-        riscos_lista.append(risco)
-
-    df['casos_dengue'] = casos_lista
-    df['risco_dengue'] = riscos_lista
-    df['mes_nome'] = df['mes'].apply(lambda x: MESES_NOMES[x - 1])
-    df['ano_mes'] = df.apply(lambda row: f"{row['ano']}-{row['mes']:02d}", axis=1)
-
-    return df

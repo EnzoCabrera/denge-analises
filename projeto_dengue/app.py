@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 
 # Imports dos módulos backend
-from backend.config import APP_INFO
+from backend.config import APP_INFO, CORES_RISCO_EMOJI
 from backend.data_generator import gerar_dados_estado, calcular_estatisticas
 from backend.models import ModeloDengue
 
@@ -84,6 +84,13 @@ def main():
 
         st.markdown("---")
 
+        df = gerar_dados_estado(estado_selecionado, n_anos, usar_dados_reais=True)
+
+        if df.empty:
+            st.error("❌ Não foi possível carregar dados REAIS para este estado/período.")
+            st.info("💡 Tente outro estado ou período de análise.")
+            st.stop()
+
         # Renderizar KPIs
         renderizar_kpis(stats)
 
@@ -102,72 +109,162 @@ def main():
         with tab1:
             st.markdown("### 📈 Evolução Temporal dos Casos")
 
+            # Série temporal de casos
             try:
                 st.plotly_chart(
                     criar_grafico_casos_temporal(df, estado_selecionado),
                     use_container_width=True
                 )
             except Exception as e:
-                st.error(f"Erro ao criar gráfico temporal: {str(e)}")
+                st.error(f"❌ Erro ao criar gráfico temporal: {str(e)}")
 
-            col1, col2 = st.columns(2)
+            st.markdown("---")
+
+            # Tendência anual (centralizado)
+            try:
+                st.plotly_chart(
+                    criar_grafico_tendencia_anual(df, estado_selecionado),
+                    use_container_width=True
+                )
+            except Exception as e:
+                st.error(f"❌ Erro ao criar gráfico de tendência: {str(e)}")
+
+            st.markdown("---")
+
+            # Estatísticas resumidas
+            st.markdown("#### 📊 Resumo Estatístico")
+
+            col1, col2, col3, col4 = st.columns(4)
 
             with col1:
-                try:
-                    st.plotly_chart(
-                        criar_grafico_tendencia_anual(df, estado_selecionado),
-                        use_container_width=True
-                    )
-                except Exception as e:
-                    st.error(f"Erro ao criar gráfico de tendência: {str(e)}")
+                st.metric(
+                    "Total de Casos",
+                    f"{df['casos_dengue'].sum():,}"
+                )
 
             with col2:
-                try:
-                    st.plotly_chart(
-                        criar_grafico_risco_mensal(df, estado_selecionado),
-                        use_container_width=True
-                    )
-                except Exception as e:
-                    st.error(f"Erro ao criar mapa de calor: {str(e)}")
+                st.metric(
+                    "Média Mensal",
+                    f"{df['casos_dengue'].mean():,.0f}"
+                )
 
-        # TAB 2: Indicadores Climáticos
+            with col3:
+                st.metric(
+                    "Maior Surto",
+                    f"{df['casos_dengue'].max():,}"
+                )
+
+            with col4:
+                st.metric(
+                    "Menor Registro",
+                    f"{df['casos_dengue'].min():,}"
+                )
+
+        # TAB 2: Análise Climática
         with tab2:
-            st.markdown("### 🌡️ Dados Climáticos")
+            st.markdown("### 🌤️ Análise de Fatores Climáticos")
 
+            # KPIs Climáticos
+            st.markdown("#### 📊 Resumo Climático do Período")
+
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                temp_media = df['temperatura_media'].mean()
+                temp_std = df['temperatura_media'].std()
+                st.metric(
+                    "🌡️ Temperatura Média",
+                    f"{temp_media:.1f}°C",
+                    f"± {temp_std:.1f}°C"
+                )
+
+            with col2:
+                umid_media = df['umidade_relativa'].mean()
+                umid_std = df['umidade_relativa'].std()
+                st.metric(
+                    "💧 Umidade Relativa Média",
+                    f"{umid_media:.1f}%",
+                    f"± {umid_std:.1f}%"
+                )
+
+            with col3:
+                precip_media = df['precipitacao'].mean()
+                precip_std = df['precipitacao'].std()
+                st.metric(
+                    "☔ Precipitação Média",
+                    f"{precip_media:.1f}mm/mês",
+                    f"± {precip_std:.1f}mm"
+                )
+
+            st.markdown("---")
+
+            # GRÁFICO PRINCIPAL: Indicadores Climáticos (SEM Precipitação)
             try:
                 st.plotly_chart(
                     criar_grafico_clima(df, estado_selecionado),
                     use_container_width=True
                 )
             except Exception as e:
-                st.error(f"Erro ao criar gráfico climático: {str(e)}")
+                st.error(f"❌ Erro ao criar gráfico climático: {str(e)}")
+                st.exception(e)
+
+            st.markdown("---")
+
+            # Tabela com resumo estatístico
+            st.markdown("#### 📋 Estatísticas Detalhadas")
 
             try:
-                st.plotly_chart(
-                    criar_grafico_correlacao(df, estado_selecionado),
-                    use_container_width=True
-                )
+                resumo = df[['temperatura_media', 'temperatura_max', 'temperatura_min',
+                             'umidade_relativa', 'precipitacao']].describe()
+                resumo = resumo.round(2)
+                resumo.columns = ['Temp. Média (°C)', 'Temp. Máx (°C)', 'Temp. Mín (°C)',
+                                  'Umidade (%)', 'Precipitação (mm)']
+
+                st.dataframe(resumo, use_container_width=True)
             except Exception as e:
-                st.error(f"Erro ao criar gráfico de correlação: {str(e)}")
+                st.error(f"❌ Erro ao gerar estatísticas: {str(e)}")
 
         # TAB 3: Análise de Risco
         with tab3:
-            col1, col2 = st.columns(2)
+            st.markdown("### 🔥 Análise de Risco de Dengue")
 
-            with col1:
-                try:
-                    st.plotly_chart(
-                        criar_grafico_distribuicao_risco(df, estado_selecionado),
-                        use_container_width=True
-                    )
-                except Exception as e:
-                    st.error(f"Erro ao criar gráfico de distribuição: {str(e)}")
+            # Gráfico de Distribuição de Risco (centralizado)
+            try:
+                st.plotly_chart(
+                    criar_grafico_distribuicao_risco(df, estado_selecionado),
+                    use_container_width=True
+                )
+            except Exception as e:
+                st.error(f"❌ Erro ao criar gráfico de risco: {str(e)}")
+                st.exception(e)
 
-            with col2:
-                try:
-                    renderizar_estatisticas_risco(df)
-                except Exception as e:
-                    st.error(f"Erro ao calcular estatísticas de risco: {str(e)}")
+            st.markdown("---")
+
+            # Estatísticas por Nível de Risco
+            st.markdown("#### 📊 Estatísticas por Nível de Risco")
+
+            try:
+                for risco in ['Alto', 'Médio', 'Baixo']:
+                    if risco in df['risco_dengue'].values:
+                        df_risco = df[df['risco_dengue'] == risco]
+
+                        col1, col2, col3, col4 = st.columns(4)
+
+                        with col1:
+                            emoji = CORES_RISCO_EMOJI.get(risco, '⚪')
+                            st.markdown(f"**{emoji} {risco}:**")
+
+                        with col2:
+                            st.metric("Ocorrências", f"{len(df_risco)}")
+
+                        with col3:
+                            st.metric("Total Casos", f"{df_risco['casos_dengue'].sum():,}")
+
+                        with col4:
+                            st.metric("Média Casos", f"{df_risco['casos_dengue'].mean():.0f}")
+
+            except Exception as e:
+                st.error(f"❌ Erro ao calcular estatísticas de risco: {str(e)}")
 
         # TAB 4: Modelo Preditivo
         with tab4:

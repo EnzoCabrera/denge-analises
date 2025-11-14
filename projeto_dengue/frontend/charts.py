@@ -65,99 +65,189 @@ def criar_grafico_casos_temporal(df: pd.DataFrame, estado_nome: str) -> go.Figur
     return fig
 
 
-def criar_grafico_tendencia_anual(df: pd.DataFrame, estado_nome: str) -> go.Figure:
+def criar_grafico_tendencia_anual(df: pd.DataFrame, estado: str) -> go.Figure:
     #Tendência de casos por ano
 
     # AGREGAR DADOS
     df_agg = _agregar_por_mes(df)
 
-    casos_ano = df_agg.groupby('ano')['casos_dengue'].sum().reset_index()
+    # Agrupar por ano
+    casos_por_ano = df.groupby('ano')['casos_dengue'].sum().reset_index()
+
+    # Calcular linha de tendência
+    from scipy import stats
+    x_numeric = casos_por_ano['ano'].values
+    y_numeric = casos_por_ano['casos_dengue'].values
+    slope, intercept, r_value, p_value, std_err = stats.linregress(x_numeric, y_numeric)
+    tendencia = slope * x_numeric + intercept
 
     fig = go.Figure()
 
+    # =====================================================
+    # BARRAS (com texto DENTRO ou AUTO)
+    # =====================================================
+
     fig.add_trace(go.Bar(
-        x=casos_ano['ano'],
-        y=casos_ano['casos_dengue'],
-        marker_color='#3498db',
-        text=casos_ano['casos_dengue'],
-        textposition='outside',
-        texttemplate='%{text:.0f}'
+        x=casos_por_ano['ano'],
+        y=casos_por_ano['casos_dengue'],
+        text=[f"{val:,.0f}" for val in casos_por_ano['casos_dengue']],
+        textposition='auto',  # ← MUDANÇA: 'auto' em vez de 'outside'
+        textfont=dict(size=12, color='white'),
+        marker=dict(
+            color=casos_por_ano['casos_dengue'],
+            colorscale='Blues',
+            showscale=False,
+            line=dict(color='rgba(255,255,255,0.3)', width=1)
+        ),
+        name='Total de Casos',
+        hovertemplate='<b>Ano: %{x}</b><br>Casos: %{y:,.0f}<extra></extra>'
     ))
 
-    # Linha de tendência (apenas se houver mais de 1 ano)
-    if len(casos_ano) > 1:
-        z = np.polyfit(casos_ano['ano'], casos_ano['casos_dengue'], 1)
-        p = np.poly1d(z)
+    # =====================================================
+    # LINHA DE TENDÊNCIA
+    # =====================================================
 
-        fig.add_trace(go.Scatter(
-            x=casos_ano['ano'],
-            y=p(casos_ano['ano']),
-            mode='lines',
-            name='Tendência',
-            line=dict(color='red', width=2, dash='dash')
-        ))
+    fig.add_trace(go.Scatter(
+        x=casos_por_ano['ano'],
+        y=tendencia,
+        mode='lines',
+        name='Tendência',
+        line=dict(color='#e74c3c', width=2, dash='dash'),
+        hovertemplate='<b>Tendência</b><br>Ano: %{x}<br>Valor: %{y:,.0f}<extra></extra>'
+    ))
+
+    # =====================================================
+    # LAYOUT COM MARGEM SUPERIOR AJUSTADA
+    # =====================================================
 
     fig.update_layout(
-        title=f'📊 Total de Casos por Ano - {estado_nome}',
+        title=f'📊 Total de Casos por Ano - {estado}',
         xaxis_title='Ano',
         yaxis_title='Total de Casos',
         height=400,
-        template='plotly_white',
-        showlegend=True if len(casos_ano) > 1 else False
+        template='plotly_dark',
+        hovermode='x unified',
+        showlegend=True,
+        margin=dict(t=80, b=60, l=80, r=40),  # ← Margem superior aumentada
+        yaxis=dict(
+            gridcolor='rgba(128,128,128,0.2)',
+            rangemode='tozero',  # ← Começa do zero
+            automargin=True  # ← Ajusta automaticamente
+        ),
+        xaxis=dict(
+            gridcolor='rgba(128,128,128,0.2)',
+            dtick=1  # ← Mostrar todos os anos
+        )
     )
 
     return fig
 
-def criar_grafico_clima(df: pd.DataFrame, estado_nome: str) -> go.Figure:
-    """Gráfico com variáveis climáticas"""
 
-    # AGREGAR DADOS
-    df_agg = _agregar_por_mes(df)
+def criar_grafico_clima(df: pd.DataFrame, estado: str) -> go.Figure:
+    """
+    Cria gráfico com indicadores climáticos e casos (SEM precipitação)
 
+    Args:
+        df: DataFrame com dados
+        estado: Nome do estado
+
+    Returns:
+        Figura Plotly com 3 subplots
+    """
+
+    from plotly.subplots import make_subplots
+
+    # =====================================================
+    # MUDANÇA: 3 gráficos em vez de 4 (sem precipitação)
+    # =====================================================
+
+    # Criar subplots (1 linha com 3 colunas)
     fig = make_subplots(
-        rows=2, cols=2,
-        subplot_titles=('Temperatura Média', 'Umidade Relativa',
-                        'Precipitação', 'Casos de Dengue'),
-        vertical_spacing=0.12,
-        horizontal_spacing=0.1
+        rows=1, cols=3,
+        subplot_titles=(
+            'Temperatura Média',
+            'Umidade Relativa',
+            'Casos de Dengue'
+        ),
+        specs=[[{"secondary_y": False}, {"secondary_y": False}, {"secondary_y": False}]],
+        horizontal_spacing=0.08
     )
 
+    # Preparar dados
+    df_sorted = df.sort_values('ano_mes')
+
+    # =====================================================
+    # SUBPLOT 1: Temperatura Média
+    # =====================================================
+
     fig.add_trace(
-        go.Scatter(x=df_agg['ano_mes'], y=df_agg['temperatura_media'],
-                   name='Temperatura', line=dict(color='#e74c3c', width=2)),
+        go.Scatter(
+            x=df_sorted['ano_mes'],
+            y=df_sorted['temperatura_media'],
+            mode='lines',
+            name='Temperatura',
+            line=dict(color='#e74c3c', width=2),
+            fill='tozeroy',
+            fillcolor='rgba(231, 76, 60, 0.1)',
+            hovertemplate='<b>%{x}</b><br>Temp: %{y:.1f}°C<extra></extra>'
+        ),
         row=1, col=1
     )
 
+    # =====================================================
+    # SUBPLOT 2: Umidade Relativa
+    # =====================================================
+
     fig.add_trace(
-        go.Scatter(x=df_agg['ano_mes'], y=df_agg['umidade_relativa'],
-                   name='Umidade', line=dict(color='#3498db', width=2)),
+        go.Scatter(
+            x=df_sorted['ano_mes'],
+            y=df_sorted['umidade_relativa'],
+            mode='lines',
+            name='Umidade',
+            line=dict(color='#3498db', width=2),
+            fill='tozeroy',
+            fillcolor='rgba(52, 152, 219, 0.1)',
+            hovertemplate='<b>%{x}</b><br>Umidade: %{y:.1f}%<extra></extra>'
+        ),
         row=1, col=2
     )
 
-    fig.add_trace(
-        go.Bar(x=df_agg['ano_mes'], y=df_agg['precipitacao'],
-               name='Precipitação', marker_color='#9b59b6'),
-        row=2, col=1
-    )
+    # =====================================================
+    # SUBPLOT 3: Casos de Dengue
+    # =====================================================
 
     fig.add_trace(
-        go.Scatter(x=df_agg['ano_mes'], y=df_agg['casos_dengue'],
-                   name='Casos', line=dict(color='#e67e22', width=2),
-                   fill='tozeroy'),
-        row=2, col=2
+        go.Scatter(
+            x=df_sorted['ano_mes'],
+            y=df_sorted['casos_dengue'],
+            mode='lines',
+            name='Casos',
+            line=dict(color='#f39c12', width=2),
+            fill='tozeroy',
+            fillcolor='rgba(243, 156, 18, 0.2)',
+            hovertemplate='<b>%{x}</b><br>Casos: %{y:,.0f}<extra></extra>'
+        ),
+        row=1, col=3
     )
 
-    fig.update_xaxes(tickangle=-45, tickfont=dict(size=9))
+    # =====================================================
+    # LAYOUT
+    # =====================================================
+
+    fig.update_xaxes(title_text="Período", row=1, col=1, tickangle=-45)
+    fig.update_xaxes(title_text="Período", row=1, col=2, tickangle=-45)
+    fig.update_xaxes(title_text="Período", row=1, col=3, tickangle=-45)
+
     fig.update_yaxes(title_text="°C", row=1, col=1)
     fig.update_yaxes(title_text="%", row=1, col=2)
-    fig.update_yaxes(title_text="mm", row=2, col=1)
-    fig.update_yaxes(title_text="Casos", row=2, col=2)
+    fig.update_yaxes(title_text="Casos", row=1, col=3)
 
     fig.update_layout(
-        title_text=f'📊 Indicadores Climáticos e Casos de Dengue - {estado_nome}',
+        title=f'📊 Indicadores Climáticos e Casos de Dengue - {estado}',
+        height=400,
         showlegend=False,
-        height=600,
-        template='plotly_white'
+        template='plotly_dark',
+        hovermode='x unified'
     )
 
     return fig
