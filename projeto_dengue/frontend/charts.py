@@ -354,29 +354,45 @@ def criar_grafico_distribuicao_risco(df: pd.DataFrame, estado_nome: str) -> go.F
 
     return fig
 
-
 def criar_grafico_modelos(df_resultados: pd.DataFrame) -> go.Figure:
-    #Gráfico de comparação de modelos
 
-    fig = go.Figure(data=[
-        go.Bar(
-            x=df_resultados['Modelo'],
-            y=df_resultados['Acurácia'] * 100,
-            text=[f"{v:.1f}%" for v in df_resultados['Acurácia'] * 100],
-            textposition='outside',
-            marker_color='#3498db'
-        )
-    ])
+    fig = go.Figure()
+
+    fig.add_trace(go.Bar(
+        x=df_resultados['Modelo'],
+        y=df_resultados['Acurácia'],
+        text=df_resultados['Acurácia'].apply(lambda x: f"{x:.1%}"),
+        textposition='inside',  # ← MUDANÇA: texto dentro da barra
+        textfont=dict(size=14, color='white', family='Arial Black'),
+        insidetextanchor='middle',
+        marker=dict(
+            color='#3498db',
+            line=dict(color='rgba(255,255,255,0.3)', width=1)
+        ),
+        hovertemplate='<b>%{x}</b><br>Acurácia: %{y:.2%}<extra></extra>'
+    ))
 
     fig.update_layout(
-        title='Comparação de Modelos - Acurácia',
+        title='📊 Comparação de Modelos - Acurácia',
         xaxis_title='Modelo',
         yaxis_title='Acurácia (%)',
         height=400,
-        template='plotly_white'
+        template='plotly_dark',
+        showlegend=False,
+        margin=dict(t=80, b=60, l=80, r=40),
+        yaxis=dict(
+            gridcolor='rgba(128,128,128,0.2)',
+            range=[0, 1.0],  # ← Fixar escala de 0 a 100%
+            tickformat='.0%',  # ← Formato percentual
+            dtick=0.2  # ← Marcas a cada 20%
+        ),
+        xaxis=dict(
+            gridcolor='rgba(128,128,128,0.2)'
+        )
     )
 
     return fig
+
 
 def criar_mapa_brasil(estados_df: pd.DataFrame) -> go.Figure:
     #Mapa do Brasil com estados

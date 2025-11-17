@@ -1,7 +1,3 @@
-"""
-Módulo de modelos de Machine Learning para predição de dengue
-"""
-
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split, cross_val_score
@@ -23,7 +19,7 @@ except ImportError:
 
 
 class ModeloDengue:
-    """Classe para treinar e avaliar modelos de predição de dengue"""
+    #Classe para treinar e avaliar modelos de predição de dengue
 
     def __init__(self):
         self.modelos_classificacao = {}
@@ -34,15 +30,8 @@ class ModeloDengue:
         self.tipo_modelo = None  # 'classificacao' ou 'regressao'
 
     def preparar_dados(self, df: pd.DataFrame) -> tuple:
-        """
-        Prepara dados para treinamento
 
-        Args:
-            df: DataFrame com dados históricos
-
-        Returns:
-            Tupla (X, y, features)
-        """
+        #Prepara dados para treinamento
 
         # Features para o modelo
         features = [
@@ -64,22 +53,11 @@ class ModeloDengue:
         return X, y, features_disponiveis
 
     def treinar_modelos(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Treina múltiplos modelos e retorna comparação
 
-        Args:
-            df: DataFrame com dados históricos
-
-        Returns:
-            DataFrame com resultados dos modelos
-        """
+        #Treina múltiplos modelos e retorna comparação
 
         # Preparar dados
         X, y, features = self.preparar_dados(df)
-
-        # =====================================================
-        # VALIDAÇÃO: Verificar número de classes únicas
-        # =====================================================
 
         classes_unicas = y.nunique()
 
@@ -91,29 +69,60 @@ class ModeloDengue:
         return self._treinar_modelos_classificacao(X, y, features)
 
     def _treinar_modelos_classificacao(self, X: pd.DataFrame, y: pd.Series, features: list) -> pd.DataFrame:
-        """
-        Treina modelos de CLASSIFICAÇÃO (quando há múltiplas classes)
-        """
+
+        #Treina modelos de CLASSIFICAÇÃO (quando há múltiplas classes)
+
 
         self.tipo_modelo = 'classificacao'
 
         # Encode target
         y_encoded = self.label_encoder.fit_transform(y)
 
-        # Split
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y_encoded, test_size=0.2, random_state=42, stratify=y_encoded
-        )
+        import streamlit as st
+        from collections import Counter
+
+        # Contar amostras por classe
+        class_counts = Counter(y_encoded)
+
+        # Debug: Mostrar distribuição
+        class_names = {i: name for i, name in enumerate(self.label_encoder.classes_)}
+        for class_id, count in sorted(class_counts.items()):
+            class_name = class_names.get(class_id, f"Classe {class_id}")
+            st.write(f"- {class_name}: {count} amostras")
+
+        # Verificar se TODAS as classes têm pelo menos 2 amostras
+        min_samples = min(class_counts.values())
+
+        if min_samples < 2:
+            st.warning(
+                f"⚠️ **Estratificação desabilitada**: Pelo menos uma classe tem apenas {min_samples} amostra(s). "
+                f"O modelo será treinado sem estratificação para evitar erro."
+            )
+            use_stratify = False
+        else:
+            use_stratify = True
+
+
+        if use_stratify:
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y_encoded, test_size=0.2, random_state=42, stratify=y_encoded
+            )
+        else:
+            # Sem estratificação
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y_encoded, test_size=0.2, random_state=42
+            )
 
         # Normalizar
         X_train_scaled = self.scaler.fit_transform(X_train)
         X_test_scaled = self.scaler.transform(X_test)
 
-        # Balancear classes (se necessário)
-        from sklearn.utils.class_weight import compute_sample_weight
-        sample_weights = compute_sample_weight('balanced', y_train)
+        try:
+            from sklearn.utils.class_weight import compute_sample_weight
+            sample_weights = compute_sample_weight('balanced', y_train)
+        except Exception:
+            sample_weights = None
 
-        # Definir modelos
         self.modelos_classificacao = {
             'Naive Bayes': GaussianNB(),
             'Random Forest': RandomForestClassifier(n_estimators=100, random_state=42, class_weight='balanced'),
@@ -125,18 +134,13 @@ class ModeloDengue:
                 n_estimators=100, random_state=42, eval_metric='mlogloss'
             )
 
-        # Treinar e avaliar
         resultados = []
 
         for nome, modelo in self.modelos_classificacao.items():
             try:
                 # Treinar
-                if nome == 'Gradient Boosting':
-                    # Gradient Boosting precisa sample_weight válido
-                    if len(np.unique(y_train)) >= 2:
-                        modelo.fit(X_train_scaled, y_train, sample_weight=sample_weights)
-                    else:
-                        modelo.fit(X_train_scaled, y_train)
+                if nome == 'Gradient Boosting' and sample_weights is not None:
+                    modelo.fit(X_train_scaled, y_train, sample_weight=sample_weights)
                 else:
                     modelo.fit(X_train_scaled, y_train)
 
@@ -145,11 +149,22 @@ class ModeloDengue:
 
                 # Métricas
                 acuracia = accuracy_score(y_test, y_pred)
-                f1 = f1_score(y_test, y_pred, average='weighted')
 
-                # Cross-validation
-                cv_scores = cross_val_score(modelo, X_train_scaled, y_train, cv=3, scoring='accuracy')
-                cv_mean = cv_scores.mean()
+                # F1-Score: tratar caso de 1 classe
+                if len(np.unique(y_test)) > 1:
+                    f1 = f1_score(y_test, y_pred, average='weighted', zero_division=0)
+                else:
+                    f1 = 0.0
+
+                # Cross-validation (se tiver dados suficientes)
+                if len(X_train_scaled) >= 6 and len(np.unique(y_train)) >= 2:
+                    try:
+                        cv_scores = cross_val_score(modelo, X_train_scaled, y_train, cv=3, scoring='accuracy')
+                        cv_mean = cv_scores.mean()
+                    except Exception:
+                        cv_mean = acuracia  # Fallback
+                else:
+                    cv_mean = acuracia
 
                 resultados.append({
                     'Modelo': nome,
@@ -159,11 +174,11 @@ class ModeloDengue:
                 })
 
             except Exception as e:
-                # Se modelo falhar, pular
+                st.warning(f"⚠️ Erro ao treinar {nome}: {str(e)}")
                 continue
 
         if not resultados:
-            raise ValueError("Nenhum modelo foi treinado com sucesso")
+            raise ValueError("❌ Nenhum modelo foi treinado com sucesso")
 
         # Converter para DataFrame
         df_resultados = pd.DataFrame(resultados)
@@ -173,13 +188,15 @@ class ModeloDengue:
         melhor_nome = df_resultados.iloc[0]['Modelo']
         self.melhor_modelo = self.modelos_classificacao[melhor_nome]
 
+        st.success(f"✅ Melhor modelo: **{melhor_nome}** (Acurácia: {df_resultados.iloc[0]['Acurácia']:.2%})")
+
         return df_resultados
 
     def _treinar_modelos_regressao(self, df: pd.DataFrame, X: pd.DataFrame, features: list) -> pd.DataFrame:
-        """
-        Treina modelos de REGRESSÃO (quando há apenas 1 classe ou poucos dados)
-        Prediz o NÚMERO DE CASOS em vez da CLASSE DE RISCO
-        """
+
+        #Treina modelos de REGRESSÃO (quando há apenas 1 classe ou poucos dados)
+        #Prediz o NÚMERO DE CASOS em vez da CLASSE DE RISCO
+
 
         self.tipo_modelo = 'regressao'
 
@@ -248,15 +265,8 @@ class ModeloDengue:
         return df_resultados
 
     def prever(self, X_novo: pd.DataFrame) -> np.ndarray:
-        """
-        Faz predições com o melhor modelo
 
-        Args:
-            X_novo: DataFrame com novos dados
-
-        Returns:
-            Array com predições
-        """
+        #Faz predições com o melhor modelo
 
         if self.melhor_modelo is None:
             raise ValueError("Modelo não foi treinado ainda!")

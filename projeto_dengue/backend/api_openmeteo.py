@@ -8,7 +8,7 @@ from backend.config import ESTADOS_BRASIL
 
 
 class OpenMeteoClient:
-    """Cliente para Open-Meteo API"""
+    #Cliente para Open-Meteo API
 
     BASE_URL = "https://archive-api.open-meteo.com/v1/archive"
 
@@ -17,18 +17,7 @@ class OpenMeteoClient:
 
     def buscar_dados_climaticos(self, latitude: float, longitude: float,
                                 data_inicio: str, data_fim: str) -> Optional[pd.DataFrame]:
-        """
-        Busca dados climáticos históricos
-
-        Args:
-            latitude: Latitude do local
-            longitude: Longitude do local
-            data_inicio: Data inicial (YYYY-MM-DD)
-            data_fim: Data final (YYYY-MM-DD)
-
-        Returns:
-            DataFrame com dados climáticos
-        """
+        #Busca dados climáticos históricos
 
         params = {
             'latitude': latitude,
@@ -48,8 +37,6 @@ class OpenMeteoClient:
         }
 
         try:
-            st.info(f"🌍 Buscando dados climáticos: {data_inicio} até {data_fim}")
-
             response = self.session.get(self.BASE_URL, params=params, timeout=30)
 
             if response.status_code == 200:
@@ -60,8 +47,6 @@ class OpenMeteoClient:
                     return None
 
                 df = pd.DataFrame(dados['daily'])
-
-                st.success(f"✅ {len(df)} dias de dados climáticos obtidos")
 
                 return self._processar_dados(df)
 
@@ -78,7 +63,7 @@ class OpenMeteoClient:
             return None
 
     def _processar_dados(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Processa dados da API"""
+        #Processa dados da API
 
         # Renomear colunas
         df.rename(columns={
@@ -104,9 +89,9 @@ class OpenMeteoClient:
 
 
 def carregar_dados_openmeteo_estado(estado_nome: str, n_anos: int = 3) -> Optional[pd.DataFrame]:
-    """
-    Carrega dados climáticos REAIS do Open-Meteo
-    """
+
+    #Carrega dados climáticos REAIS do Open-Meteo
+
 
     if estado_nome not in ESTADOS_BRASIL:
         st.warning(f"⚠️ Estado '{estado_nome}' não encontrado")
@@ -123,10 +108,6 @@ def carregar_dados_openmeteo_estado(estado_nome: str, n_anos: int = 3) -> Option
     start_date = f"{ano_inicio}-01-01"
     end_date = data_atual.strftime('%Y-%m-%d')
 
-    # =====================================================
-    # CORREÇÃO: Usar chaves corretas
-    # =====================================================
-
     # Verificar qual chave existe
     if 'latitude' in estado_info:
         lat = estado_info['latitude']
@@ -137,10 +118,6 @@ def carregar_dados_openmeteo_estado(estado_nome: str, n_anos: int = 3) -> Option
     else:
         st.error(f"❌ Coordenadas não encontradas para {estado_nome}")
         return None
-
-    st.info(f"🌐 Buscando dados climáticos REAIS para **{estado_nome}**")
-    st.info(f"📅 Período: **Janeiro/{ano_inicio}** a **{data_atual.strftime('%B/%Y')}**")
-    st.info(f"📍 Coordenadas: Lat {lat}, Lon {lon}")
 
     # Buscar dados
     client = OpenMeteoClient()
@@ -163,13 +140,11 @@ def carregar_dados_openmeteo_estado(estado_nome: str, n_anos: int = 3) -> Option
         st.error("❌ Nenhum dado após agregação mensal")
         return None
 
-    st.success(f"✅ {len(df_mensal)} meses de dados climáticos processados")
-
     return df_mensal
 
 
 def _agregar_dados_mensais(df: pd.DataFrame) -> pd.DataFrame:
-    """Agrega dados diários em mensais"""
+    #Agrega dados diários em mensais
 
     df['ano'] = df['data'].dt.year
     df['mes'] = df['data'].dt.month

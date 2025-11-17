@@ -8,20 +8,18 @@ from backend.api_infodengue import carregar_dados_infodengue_estado, classificar
 
 def gerar_dados_estado(estado_nome: str, n_anos: int = 3,
                        usar_dados_reais: bool = True) -> pd.DataFrame:
-    """
-    Carrega dados REAIS para um estado
-    OBRIGATÓRIO: InfoDengue (casos reais) + Open-Meteo (clima real)
-    """
+
+    #Carrega dados REAIS para um estado
+    #OBRIGATÓRIO: InfoDengue (casos reais) + Open-Meteo (clima real)
+
 
     estado_info = ESTADOS_BRASIL[estado_nome]
     regiao = estado_info['regiao']
 
-    # ✅ Calcular período completo (janeiro do primeiro ano até dezembro do último)
+    # Calcular período completo (janeiro do primeiro ano até dezembro do último)
     ano_atual = pd.Timestamp.now().year
     ano_inicio = ano_atual - n_anos + 1
     ano_fim = ano_atual
-
-    st.info(f"🌐 Carregando dados REAIS para {estado_nome} ({ano_inicio} a {ano_fim})...")
 
     # 1. Buscar CLIMA REAL (Open-Meteo) - OBRIGATÓRIO
     df_clima = carregar_dados_openmeteo_estado(estado_nome, n_anos)
@@ -30,13 +28,11 @@ def gerar_dados_estado(estado_nome: str, n_anos: int = 3,
         st.error("❌ Falha ao carregar dados climáticos.")
         return pd.DataFrame()
 
-    # ✅ FILTRAR apenas os anos solicitados (janeiro a dezembro)
+    # FILTRAR apenas os anos solicitados (janeiro a dezembro)
     df_clima = df_clima[
         (df_clima['ano'] >= ano_inicio) &
         (df_clima['ano'] <= ano_fim)
         ].copy()
-
-    st.success(f"✅ {len(df_clima)} meses de dados climáticos ({ano_inicio}-{ano_fim})")
 
     # 2. Buscar CASOS REAIS (InfoDengue) - OBRIGATÓRIO
     df_casos = carregar_dados_infodengue_estado(estado_nome, n_anos)
@@ -45,13 +41,11 @@ def gerar_dados_estado(estado_nome: str, n_anos: int = 3,
         st.error("❌ Falha ao carregar dados do InfoDengue.")
         return pd.DataFrame()
 
-    # ✅ FILTRAR apenas os anos solicitados
+    # FILTRAR apenas os anos solicitados
     df_casos = df_casos[
         (df_casos['ano'] >= ano_inicio) &
         (df_casos['ano'] <= ano_fim)
         ].copy()
-
-    st.success(f"✅ {len(df_casos)} meses de dados do InfoDengue ({ano_inicio}-{ano_fim})")
 
     # 3. COMBINAR dados reais (INNER JOIN)
     df = pd.merge(
@@ -66,7 +60,7 @@ def gerar_dados_estado(estado_nome: str, n_anos: int = 3,
         st.warning(f"🔍 Clima: {df_clima['ano'].unique()} | InfoDengue: {df_casos['ano'].unique()}")
         return pd.DataFrame()
 
-    # ✅ Garantir que temos todos os meses do período
+    # Garantir que temos todos os meses do período
     anos_meses_esperados = []
     for ano in range(ano_inicio, ano_fim + 1):
         for mes in range(1, 13):
@@ -75,10 +69,10 @@ def gerar_dados_estado(estado_nome: str, n_anos: int = 3,
                 break
             anos_meses_esperados.append((ano, mes))
 
-    # ✅ Criar DataFrame de referência completo
+    # Criar DataFrame de referência completo
     df_referencia = pd.DataFrame(anos_meses_esperados, columns=['ano', 'mes'])
 
-    # ✅ Merge com referência para identificar meses faltantes
+    # Merge com referência para identificar meses faltantes
     df_completo = pd.merge(
         df_referencia,
         df,
@@ -87,16 +81,14 @@ def gerar_dados_estado(estado_nome: str, n_anos: int = 3,
         indicator=True
     )
 
-    # ✅ Mostrar estatísticas de cobertura
+    # Mostrar estatísticas de cobertura
     meses_com_dados = len(df_completo[df_completo['_merge'] == 'both'])
     meses_faltantes = len(df_completo[df_completo['_merge'] == 'left_only'])
-
-    st.info(f"📊 Cobertura: {meses_com_dados}/{len(df_completo)} meses com dados completos")
 
     if meses_faltantes > 0:
         st.warning(f"⚠️ {meses_faltantes} meses sem dados em uma ou ambas as APIs")
 
-    # ✅ Remover coluna auxiliar '_merge'
+    # Remover coluna auxiliar '_merge'
     df = df_completo[df_completo['_merge'] == 'both'].drop(columns=['_merge']).copy()
 
     if len(df) == 0:
@@ -122,19 +114,14 @@ def gerar_dados_estado(estado_nome: str, n_anos: int = 3,
     df['latitude'] = estado_info['lat']
     df['longitude'] = estado_info['lon']
 
-    # ✅ Ordenar por ano e mês
+    # Ordenar por ano e mês
     df = df.sort_values(['ano', 'mes']).reset_index(drop=True)
-
-    # ✅ Estatísticas finais
-    st.success(f"✅ {len(df)} meses com dados 100% REAIS carregados")
-    st.info(
-        f"📊 Casos - Min: {df['casos_dengue'].min()}, Max: {df['casos_dengue'].max()}, Média: {df['casos_dengue'].mean():.0f}")
 
     return df
 
 
 def calcular_estatisticas(df: pd.DataFrame) -> dict:
-    """Calcula estatísticas do dataset"""
+    #Calcula estatísticas do dataset
 
     return {
         'total_casos': int(df['casos_dengue'].sum()),

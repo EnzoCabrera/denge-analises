@@ -169,39 +169,7 @@ def renderizar_info_dados(usar_dados_reais: bool, total_registros: int):
     #Renderiza informações sobre a fonte dos dados
 
     if usar_dados_reais:
-        st.info(f"""
-        🌐 **Dados Climáticos REAIS do Open-Meteo**  
-        Total de registros: {total_registros:,}  
-        Fonte: Instituto Nacional de Meteorologia  
-        
-        ⚠️ Casos de dengue são simulados baseados nas condições climáticas reais.
-        """)
+        st.caption(f"✅ Dados REAIS | {total_registros:,} registros | Fontes: InfoDengue + Open-Meteo")
     else:
-        st.warning(f"""
-        🎲 **Dados Simulados**  
-        Total de registros: {total_registros:,}  
-        Dados gerados algoritmicamente para fins educacionais.
-        """)
+        st.caption(f"🎲 Dados Simulados | {total_registros:,} registros")
 
-
-def renderizar_fonte_dados(df: pd.DataFrame):
-
-    #Mostra badge com fonte dos dados
-
-
-    # Verificar se tem dados reais (InfoDengue retorna valores específicos)
-    if df['casos_dengue'].sum() > 100000:  # Indicativo de dados reais agregados
-        st.success("""
-        ### ✅ Dados REAIS em Uso
-
-        - **Casos de Dengue:** InfoDengue (Fiocruz)
-        - **Clima:** Open-Meteo (Histórico Real)
-        - **Período:** Últimos 3 anos
-        """)
-    else:
-        st.info("""
-        ### ⚙️ Dados Simulados em Uso
-
-        - **Casos:** Algoritmo baseado em clima real
-        - **Clima:** Open-Meteo (Histórico Real)
-        """)

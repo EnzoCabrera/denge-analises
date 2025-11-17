@@ -79,11 +79,6 @@ def main():
 
         st.markdown("---")
 
-        from frontend.components import renderizar_fonte_dados
-        renderizar_fonte_dados(df)
-
-        st.markdown("---")
-
         df = gerar_dados_estado(estado_selecionado, n_anos, usar_dados_reais=True)
 
         if df.empty:
@@ -284,10 +279,6 @@ def main():
                     st.exception(e)
                     return
 
-            # =====================================================
-            # EXIBIR TIPO DE MODELO USADO
-            # =====================================================
-
             if modelo.tipo_modelo == 'regressao':
                 st.info("""
                 ℹ️ **Modelo de Regressão Ativado**
@@ -297,7 +288,6 @@ def main():
                 em vez da classificação de risco.
                 """)
 
-            # =====================================================
 
             col1, col2 = st.columns([2, 1])
 
@@ -365,7 +355,6 @@ def main():
                     st.error(f"❌ Erro na predição: {str(e)}")
                     st.exception(e)
 
-            # Exibir resultados
             # Exibir resultados
             if 'predicao' in locals():
 

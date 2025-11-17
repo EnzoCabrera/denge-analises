@@ -189,10 +189,10 @@ class PredicaoDengue:
         precip = clima_atual['precipitacao']
         mes = clima_atual['mes']
 
-        # Calcular SCORE CLIMÁTICO (0-12 pontos)
+        # Calcular SCORE CLIMÁTICO
         score_climatico = 0
 
-        # Temperatura (0-3 pontos)
+        # Temperatura
         if 25 <= temp <= 30:
             score_climatico += 3
         elif 20 <= temp <= 35:
@@ -200,7 +200,7 @@ class PredicaoDengue:
         elif temp > 18:
             score_climatico += 1
 
-        # Umidade (0-3 pontos)
+        # Umidade
         if umidade > 80:
             score_climatico += 3
         elif umidade > 70:
@@ -208,7 +208,7 @@ class PredicaoDengue:
         elif umidade > 60:
             score_climatico += 1
 
-        # Precipitação (0-3 pontos)
+        # Precipitação
         if precip > 150:
             score_climatico += 3
         elif precip > 100:
@@ -216,7 +216,7 @@ class PredicaoDengue:
         elif precip > 50:
             score_climatico += 1
 
-        # Sazonalidade (0-3 pontos) ← AUMENTADO DE 2 PARA 3
+        # Sazonalidade
         if mes in [12, 1, 2, 3]:  # Verão (ALTÍSSIMO RISCO)
             score_climatico += 3
         elif mes in [10, 11]:  # Primavera (ALTO RISCO)
@@ -241,7 +241,7 @@ class PredicaoDengue:
 
         # CLASSIFICAÇÃO HÍBRIDA (Score Climático + Casos Previstos)
 
-        # 1. Se score climático for ALTO (>= 8)
+        # 1. Se score climático for ALTO
         if score_climatico >= 8:
             # Condições muito favoráveis
             if variacao_percentual > -30:  # Mesmo abaixo, se clima for crítico

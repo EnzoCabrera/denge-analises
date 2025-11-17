@@ -6,11 +6,6 @@ import streamlit as st
 from typing import Optional
 from backend.config import ESTADOS_BRASIL, MESES_NOMES
 
-
-# =====================================================
-# GEOCÓDIGOS IBGE (Capitais dos Estados)
-# =====================================================
-
 GEOCODES_INFODENGUE = {
     'Acre': 1200401,           # Rio Branco
     'Alagoas': 2704302,        # Maceió
@@ -43,7 +38,7 @@ GEOCODES_INFODENGUE = {
 
 
 class InfoDengueClient:
-    """Cliente para API do InfoDengue"""
+    #Cliente para API do InfoDengue
     
     BASE_URL = "https://info.dengue.mat.br/api/alertcity"
     
@@ -55,17 +50,8 @@ class InfoDengueClient:
         })
     
     def buscar_casos_dengue(self, geocode: int, ano_inicio: int, ano_fim: int) -> Optional[pd.DataFrame]:
-        """
-        Busca casos reais de dengue do InfoDengue
-        
-        Args:
-            geocode: Código IBGE do município
-            ano_inicio: Ano inicial
-            ano_fim: Ano final
-            
-        Returns:
-            DataFrame com casos reais ou None
-        """
+
+        #Busca casos reais de dengue do InfoDengue
         
         try:
             params = {
@@ -99,15 +85,8 @@ class InfoDengueClient:
             return None
     
     def _processar_dados_infodengue(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Processa dados brutos do InfoDengue
-        
-        Args:
-            df: DataFrame bruto da API
-            
-        Returns:
-            DataFrame processado
-        """
+
+        #Processa dados brutos do InfoDengue
         
         # Converter timestamp de milissegundos para datetime
         if 'data_iniSE' in df.columns:
@@ -139,26 +118,15 @@ class InfoDengueClient:
 
 @st.cache_data(ttl=86400, show_spinner=False)
 def carregar_dados_infodengue_estado(estado_nome: str, n_anos: int = 3) -> Optional[pd.DataFrame]:
-    """
-    Carrega dados REAIS de dengue do InfoDengue
-    Busca desde JANEIRO do ano inicial até o mês atual
 
-    Args:
-        estado_nome: Nome do estado
-        n_anos: Número de anos para retroceder (ex: 2 = desde Jan/2023)
+    #Carrega dados REAIS de dengue do InfoDengue
+    #Busca desde JANEIRO do ano inicial até o mês atual
 
-    Returns:
-        DataFrame com casos REAIS agregados por mês ou None
-    """
 
     if estado_nome not in GEOCODES_INFODENGUE:
         return None
 
     geocode = GEOCODES_INFODENGUE[estado_nome]
-
-    # =====================================================
-    # CORREÇÃO: Calcular ano inicial e buscar desde Janeiro
-    # =====================================================
 
     from datetime import datetime
 
@@ -169,20 +137,12 @@ def carregar_dados_infodengue_estado(estado_nome: str, n_anos: int = 3) -> Optio
     ano_inicio = ano_atual - n_anos
     ano_fim = ano_atual
 
-    st.info(f"🌐 Buscando dados REAIS de dengue para **{estado_nome}** (Capital)")
-    st.info(f"📅 Período: **Janeiro/{ano_inicio}** a **{data_atual.strftime('%B/%Y')}**")
-    st.info(f"🏙️ Geocode IBGE: **{geocode}**")
-
     # Buscar dados da API (pega ano completo)
     client = InfoDengueClient()
     df_casos = client.buscar_casos_dengue(geocode, ano_inicio, ano_fim)
 
     if df_casos is None or len(df_casos) == 0:
         return None
-
-    # =====================================================
-    # FILTRAR: Desde Janeiro do ano_inicio até hoje
-    # =====================================================
 
     df_casos['data'] = pd.to_datetime(df_casos['data'])
 
@@ -202,22 +162,12 @@ def carregar_dados_infodengue_estado(estado_nome: str, n_anos: int = 3) -> Optio
     if len(df_mensal) == 0:
         return None
 
-    st.success(f"✅ {len(df_mensal)} meses de dados REAIS processados")
-    st.success(f"📊 Período final: {df_mensal['ano_mes'].min()} a {df_mensal['ano_mes'].max()}")
-
     return df_mensal
 
 
 def _agregar_casos_por_mes(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Agrega casos semanais em mensais
-    
-    Args:
-        df: DataFrame com dados semanais
-        
-    Returns:
-        DataFrame agregado por mês
-    """
+
+    #Agrega casos semanais em mensais
     
     if len(df) == 0:
         return pd.DataFrame()
@@ -238,15 +188,8 @@ def _agregar_casos_por_mes(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def classificar_risco_casos_reais(casos: int) -> str:
-    """
-    Classifica risco baseado no número de casos REAIS
-    
-    Args:
-        casos: Número de casos no mês
-        
-    Returns:
-        'Alto', 'Médio' ou 'Baixo'
-    """
+
+    #Classifica risco baseado no número de casos REAIS
     
     if casos > 5000:
         return 'Alto'
@@ -257,15 +200,8 @@ def classificar_risco_casos_reais(casos: int) -> str:
 
 
 def obter_estatisticas_infodengue(df: pd.DataFrame) -> dict:
-    """
-    Calcula estatísticas dos dados do InfoDengue
-    
-    Args:
-        df: DataFrame com dados mensais
-        
-    Returns:
-        Dicionário com estatísticas
-    """
+
+    #Calcula estatísticas dos dados do InfoDengue
     
     if df is None or len(df) == 0:
         return {}
