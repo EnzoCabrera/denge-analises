@@ -418,56 +418,86 @@ def criar_mapa_brasil(estados_df: pd.DataFrame) -> go.Figure:
 
     return fig
 
-def criar_grafico_predicao_mes_atual(predicao: dict, estado_nome: str) -> go.Figure:
 
-    #Gráfico de predição para o mês atual
+def criar_grafico_predicao_mes_atual(predicao: dict, estado: str):
+    """
+    Cria gráfico de predição para o mês atual (REGRESSÃO)
 
+    Args:
+        predicao: Dict com predição (casos_previstos, intervalo, etc)
+        estado: Nome do estado
+    """
+
+    import plotly.graph_objects as go
     from datetime import datetime
-    mes_atual_nome = datetime.now().strftime('%B/%Y')
 
-    # Cores baseadas no risco
-    cores = {
-        'Alto': '#e74c3c',
-        'Médio': '#f39c12',
-        'Baixo': '#27ae60'
-    }
-    cor = cores.get(predicao['risco_previsto'], '#3498db')
+    # Valores
+    casos_previstos = predicao['casos_previstos']
+    intervalo_inf = predicao['intervalo_inferior']
+    intervalo_sup = predicao['intervalo_superior']
 
+    # Determinar cor baseada na variação (se existir)
+    if 'variacao_historico' in predicao:
+        variacao = predicao['variacao_historico']
+        if variacao > 20:
+            cor = '#e74c3c'  # Vermelho (aumento alto)
+        elif variacao < -20:
+            cor = '#2ecc71'  # Verde (redução)
+        else:
+            cor = '#3498db'  # Azul (estável)
+    else:
+        cor = '#3498db'  # Azul padrão
+
+    # Criar gráfico de gauge/medidor
     fig = go.Figure()
 
-    # Barra histórica
+    # Adicionar barra com intervalo de confiança
     fig.add_trace(go.Bar(
-        x=['Histórico<br>Média'],
-        y=[predicao['casos_historicos_media']],
-        name='Histórico',
-        marker_color='#95a5a6',
-        text=[f"{predicao['casos_historicos_media']}"],
-        textposition='outside'
-    ))
-
-    # Barra de predição com intervalo de confiança
-    fig.add_trace(go.Bar(
-        x=['Predição<br>Atual'],
-        y=[predicao['casos_previstos']],
-        name='Predição',
+        x=['Predição'],
+        y=[casos_previstos],
+        name='Casos Previstos',
         marker_color=cor,
-        text=[f"{predicao['casos_previstos']}"],
+        text=[f'{int(casos_previstos):,}'],
         textposition='outside',
+        textfont=dict(size=16, color='white'),
         error_y=dict(
             type='data',
             symmetric=False,
-            array=[predicao['intervalo_superior'] - predicao['casos_previstos']],
-            arrayminus=[predicao['casos_previstos'] - predicao['intervalo_inferior']],
-            color='rgba(0,0,0,0.3)'
+            array=[intervalo_sup - casos_previstos],
+            arrayminus=[casos_previstos - intervalo_inf],
+            color='rgba(255,255,255,0.5)',
+            thickness=3,
+            width=10
         )
     ))
 
+    # Layout
+    mes_atual = datetime.now().strftime('%B/%Y')
+
     fig.update_layout(
-        title=f'🔮 Predição de Casos de Dengue - {mes_atual_nome} - {estado_nome}',
-        yaxis_title='Número de Casos',
-        showlegend=True,
+        title=dict(
+            text=f'📊 Predição de Casos - {mes_atual}<br><sub>{estado}</sub>',
+            x=0.5,
+            xanchor='center',
+            font=dict(size=18, color='white')
+        ),
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(color='white'),
+        showlegend=False,
+        xaxis=dict(
+            showgrid=False,
+            showticklabels=False,
+            zeroline=False
+        ),
+        yaxis=dict(
+            title='Número de Casos',
+            showgrid=True,
+            gridcolor='rgba(255,255,255,0.1)',
+            zeroline=False
+        ),
         height=400,
-        template='plotly_white'
+        margin=dict(l=50, r=50, t=100, b=50)
     )
 
     return fig

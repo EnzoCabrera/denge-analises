@@ -1,13 +1,15 @@
+"""
+Módulo de predição de casos de dengue para o mês atual
+"""
+
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
-import streamlit as st
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from datetime import datetime
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import mean_absolute_error, r2_score
-import warnings
-
-warnings.filterwarnings('ignore')
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, ExtraTreesRegressor
+from sklearn.linear_model import Ridge, Lasso
+from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 
 try:
     import xgboost as xgb
@@ -18,71 +20,78 @@ except ImportError:
 
 
 class PredicaoDengue:
+    """
+    Classe para predição de casos de dengue no mês atual
+    """
+
     def __init__(self):
-        self.modelo = None
-        self.scaler = StandardScaler()
-        self.features = [
-            'temperatura_media', 'temperatura_max', 'temperatura_min',
-            'umidade_relativa', 'precipitacao', 'mes',
-            'temp_x_umidade', 'temp_x_precip', 'umidade_x_precip',
-            'temp_quadrada', 'mes_sin', 'mes_cos',
-            'media_movel_3m', 'tendencia'
-        ]
+        """Inicializa o modelo de predição"""
+        self.melhor_modelo = None
         self.melhor_modelo_nome = None
-        self.mae = None
-        self.r2 = None
-
-    def preparar_features(self, df: pd.DataFrame) -> pd.DataFrame:
-
-        #Cria features para o modelo preditivo
-
-        df_prep = df.copy()
-
-        # Features de interação
-        df_prep['temp_x_umidade'] = df['temperatura_media'] * df['umidade_relativa']
-        df_prep['temp_x_precip'] = df['temperatura_media'] * df['precipitacao']
-        df_prep['umidade_x_precip'] = df['umidade_relativa'] * df['precipitacao']
-
-        # Features não-lineares
-        df_prep['temp_quadrada'] = df['temperatura_media'] ** 2
-
-        # Sazonalidade circular
-        df_prep['mes_sin'] = np.sin(2 * np.pi * df['mes'] / 12)
-        df_prep['mes_cos'] = np.cos(2 * np.pi * df['mes'] / 12)
-
-        # Ordenar por data
-        df_prep = df_prep.sort_values(['ano', 'mes'])
-
-        # Média móvel de casos (últimos 3 meses)
-        df_prep['media_movel_3m'] = df_prep['casos_dengue'].rolling(
-            window=3, min_periods=1
-        ).mean()
-
-        # Tendência (índice normalizado)
-        df_prep['tendencia'] = np.arange(len(df_prep)) / len(df_prep)
-
-        return df_prep
+        self.scaler = StandardScaler()
+        self.features = []
+        self.r2_score = 0.0
+        self.mae_score = 0.0
 
     def treinar_modelo(self, df: pd.DataFrame) -> dict:
-        #Treina modelos de regressão para predição
+        """
+        Treina modelos de regressão para predição de casos
 
-        # Preparar features
-        df_prep = self.preparar_features(df)
+        Args:
+            df: DataFrame com histórico de dados
 
-        # Separar features e target
-        X = df_prep[self.features]
-        y = df_prep['casos_dengue']
+        Returns:
+            Dict com resultados do treinamento
+        """
 
-        # Dividir em treino e teste (80/20)
-        split_idx = int(len(X) * 0.8)
-        X_train, X_test = X[:split_idx], X[split_idx:]
-        y_train, y_test = y[:split_idx], y[split_idx:]
+        # =====================================================
+        # 1. PREPARAR DADOS COM FEATURE ENGINEERING
+        # =====================================================
+
+        try:
+            from backend.feature_engineering import (
+                adicionar_features_engenheiradas,
+                selecionar_features_relevantes,
+                validar_features
+            )
+
+            if validar_features(df):
+                df_eng = adicionar_features_engenheiradas(df)
+                X, features = selecionar_features_relevantes(df_eng)
+            else:
+                raise ValueError("Validação falhou")
+
+        except (ImportError, ValueError):
+            # Fallback: features básicas
+            features = ['temperatura_media', 'temperatura_max', 'temperatura_min',
+                        'umidade_relativa', 'precipitacao', 'mes']
+            features_disponiveis = [f for f in features if f in df.columns]
+            X = df[features_disponiveis].copy()
+            features = features_disponiveis
+
+        # Target: casos de dengue
+        y = df['casos_dengue'].values
+
+        # Verificar dados suficientes
+        if len(X) < 10:
+            raise ValueError(f"Dados insuficientes: apenas {len(X)} registros")
+
+        # =====================================================
+        # 2. SPLIT E NORMALIZAÇÃO
+        # =====================================================
+
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, random_state=42
+        )
 
         # Normalizar
         X_train_scaled = self.scaler.fit_transform(X_train)
         X_test_scaled = self.scaler.transform(X_test)
 
-        # Treinar múltiplos modelos
+        # =====================================================
+        # 3. DEFINIR MODELOS
+        # =====================================================
+
         modelos = {
             'Random Forest': RandomForestRegressor(
                 n_estimators=200,
@@ -92,254 +101,268 @@ class PredicaoDengue:
             ),
             'Gradient Boosting': GradientBoostingRegressor(
                 n_estimators=200,
-                learning_rate=0.1,
+                learning_rate=0.05,
                 max_depth=5,
                 random_state=42
-            )
+            ),
+            'Extra Trees': ExtraTreesRegressor(
+                n_estimators=200,
+                max_depth=10,
+                random_state=42,
+                n_jobs=-1
+            ),
+            'Ridge': Ridge(alpha=1.0),
+            'Lasso': Lasso(alpha=1.0)
         }
 
         if XGBOOST_DISPONIVEL:
             modelos['XGBoost'] = xgb.XGBRegressor(
                 n_estimators=200,
-                learning_rate=0.1,
+                learning_rate=0.05,
                 max_depth=6,
-                random_state=42,
-                n_jobs=-1
+                random_state=42
             )
 
+        # =====================================================
+        # 4. TREINAR E AVALIAR
+        # =====================================================
+
         resultados = []
-        melhor_mae = float('inf')
+        melhor_r2 = -np.inf
+        melhor_modelo = None
+        melhor_nome = None
+        melhor_mae = np.inf
 
         for nome, modelo in modelos.items():
-            # Treinar
-            modelo.fit(X_train_scaled, y_train)
+            try:
+                # Treinar
+                modelo.fit(X_train_scaled, y_train)
 
-            # Predizer
-            y_pred = modelo.predict(X_test_scaled)
+                # Predizer
+                y_pred = modelo.predict(X_test_scaled)
 
-            # Métricas
-            mae = mean_absolute_error(y_test, y_pred)
-            r2 = r2_score(y_test, y_pred)
+                # Métricas
+                r2 = r2_score(y_test, y_pred)
+                mae = mean_absolute_error(y_test, y_pred)
+                rmse = np.sqrt(mean_squared_error(y_test, y_pred))
 
-            resultados.append({
-                'Modelo': nome,
-                'MAE': mae,
-                'R²': r2,
-                'RMSE': np.sqrt(np.mean((y_test - y_pred) ** 2))
-            })
+                # MAPE
+                mape = np.mean(np.abs((y_test - y_pred) / (y_test + 1))) * 100
 
-            # Salvar melhor modelo
-            if mae < melhor_mae:
-                melhor_mae = mae
-                self.modelo = modelo
-                self.melhor_modelo_nome = nome
-                self.mae = mae
-                self.r2 = r2
+                resultados.append({
+                    'Modelo': nome,
+                    'R²': r2,
+                    'MAE': mae,
+                    'RMSE': rmse,
+                    'MAPE (%)': mape
+                })
+
+                # Atualizar melhor modelo
+                if r2 > melhor_r2:
+                    melhor_r2 = r2
+                    melhor_mae = mae
+                    melhor_modelo = modelo
+                    melhor_nome = nome
+
+            except Exception as e:
+                print(f"Erro ao treinar {nome}: {str(e)}")
+                continue
+
+        if melhor_modelo is None:
+            raise ValueError("Nenhum modelo foi treinado com sucesso")
+
+        # =====================================================
+        # 5. SALVAR ATRIBUTOS DA CLASSE (IMPORTANTE!)
+        # =====================================================
+
+        self.melhor_modelo = melhor_modelo
+        self.melhor_modelo_nome = melhor_nome
+        self.features = features
+        self.r2_score = melhor_r2
+        self.mae_score = melhor_mae
+
+        # Converter para DataFrame
+        df_resultados = pd.DataFrame(resultados)
+        df_resultados = df_resultados.sort_values('R²', ascending=False).reset_index(drop=True)
 
         return {
-            'resultados': pd.DataFrame(resultados),
-            'melhor_modelo': self.melhor_modelo_nome,
-            'mae': self.mae,
-            'r2': self.r2,
-            'y_test': y_test,
-            'y_pred': y_pred,
-            'datas_test': df_prep.iloc[split_idx:][['ano', 'mes', 'ano_mes']].reset_index(drop=True)
+            'resultados': df_resultados,
+            'r2': melhor_r2,
+            'mae': melhor_mae
         }
 
-    def prever_mes_atual(self, df_historico: pd.DataFrame,
-                         clima_atual: dict) -> dict:
-        #Prevê casos de dengue para o mês atual
+    def prever_mes_atual(self, df: pd.DataFrame, clima_atual: dict) -> dict:
+        """
+        Faz predição para o mês atual baseado no clima estimado
 
-        if self.modelo is None:
-            raise ValueError("Modelo não foi treinado ainda!")
+        Args:
+            df: DataFrame com histórico de dados
+            clima_atual: Dict com clima atual/estimado
 
-        # Preparar dados do mês atual
-        df_atual = pd.DataFrame([clima_atual])
+        Returns:
+            Dict com predição e metadados
+        """
 
-        # Calcular features derivadas
-        df_atual['temp_x_umidade'] = df_atual['temperatura_media'] * df_atual['umidade_relativa']
-        df_atual['temp_x_precip'] = df_atual['temperatura_media'] * df_atual['precipitacao']
-        df_atual['umidade_x_precip'] = df_atual['umidade_relativa'] * df_atual['precipitacao']
-        df_atual['temp_quadrada'] = df_atual['temperatura_media'] ** 2
-        df_atual['mes_sin'] = np.sin(2 * np.pi * df_atual['mes'] / 12)
-        df_atual['mes_cos'] = np.cos(2 * np.pi * df_atual['mes'] / 12)
+        if self.melhor_modelo is None:
+            raise ValueError("Modelo não foi treinado. Execute treinar_modelo() primeiro.")
 
-        # Média móvel (últimos 3 meses históricos)
-        ultimos_3_meses = df_historico.tail(3)['casos_dengue'].mean()
-        df_atual['media_movel_3m'] = ultimos_3_meses
+        # =====================================================
+        # 1. PREPARAR FEATURES PARA PREDIÇÃO
+        # =====================================================
 
-        # Tendência
-        df_atual['tendencia'] = 1.0
+        # Feature engineering no clima atual
+        X_novo = pd.DataFrame([{
+            'temperatura_media': clima_atual.get('temperatura_media', df['temperatura_media'].mean()),
+            'temperatura_max': clima_atual.get('temperatura_max', df['temperatura_max'].mean()),
+            'temperatura_min': clima_atual.get('temperatura_min', df['temperatura_min'].mean()),
+            'umidade_relativa': clima_atual.get('umidade_relativa', df['umidade_relativa'].mean()),
+            'precipitacao': clima_atual.get('precipitacao', df['precipitacao'].mean()),
+            'mes': datetime.now().month
+        }])
+
+        # Aplicar feature engineering (se disponível)
+        try:
+            from backend.feature_engineering import adicionar_features_engenheiradas
+
+            # Adicionar histórico recente para features de lag
+            df_temp = df.copy().tail(10)  # Últimos 10 registros
+            df_temp = pd.concat([df_temp, X_novo], ignore_index=True)
+
+            # Feature engineering
+            df_temp = adicionar_features_engenheiradas(df_temp)
+
+            # Pegar apenas a última linha (predição)
+            X_novo_eng = df_temp.tail(1)
+
+            # Selecionar features (apenas as que foram usadas no treino)
+            features_disponiveis = [f for f in self.features if f in X_novo_eng.columns]
+            X_novo_final = X_novo_eng[features_disponiveis]
+
+        except (ImportError, Exception):
+            # Fallback: usar features básicas
+            features_basicas = ['temperatura_media', 'temperatura_max', 'temperatura_min',
+                                'umidade_relativa', 'precipitacao', 'mes']
+            features_disponiveis = [f for f in features_basicas if f in X_novo.columns]
+            X_novo_final = X_novo[features_disponiveis]
+
+        # =====================================================
+        # 2. FAZER PREDIÇÃO
+        # =====================================================
 
         # Normalizar
-        X_atual = df_atual[self.features]
-        X_atual_scaled = self.scaler.transform(X_atual)
+        X_novo_scaled = self.scaler.transform(X_novo_final)
 
         # Predizer
-        predicao = self.modelo.predict(X_atual_scaled)[0]
+        casos_previstos = self.melhor_modelo.predict(X_novo_scaled)[0]
 
-        # Intervalo de confiança
-        intervalo_inferior = max(0, predicao - 1.96 * self.mae)
-        intervalo_superior = predicao + 1.96 * self.mae
+        # Garantir que não seja negativo
+        casos_previstos = max(0, casos_previstos)
 
-        casos_previstos = int(predicao)
+        # =====================================================
+        # 3. CALCULAR INTERVALO DE CONFIANÇA
+        # =====================================================
 
-        temp = clima_atual['temperatura_media']
-        umidade = clima_atual['umidade_relativa']
-        precip = clima_atual['precipitacao']
-        mes = clima_atual['mes']
+        # Usar erro médio (MAE) do treino para estimar intervalo
+        mae = self.mae_score
 
-        # Calcular SCORE CLIMÁTICO
-        score_climatico = 0
+        intervalo_inferior = max(0, casos_previstos - (1.5 * mae))
+        intervalo_superior = casos_previstos + (1.5 * mae)
 
-        # Temperatura
-        if 25 <= temp <= 30:
-            score_climatico += 3
-        elif 20 <= temp <= 35:
-            score_climatico += 2
-        elif temp > 18:
-            score_climatico += 1
+        # =====================================================
+        # 4. CALCULAR VARIAÇÃO vs HISTÓRICO
+        # =====================================================
 
-        # Umidade
-        if umidade > 80:
-            score_climatico += 3
-        elif umidade > 70:
-            score_climatico += 2
-        elif umidade > 60:
-            score_climatico += 1
+        # Média histórica do mesmo mês
+        mes_atual = datetime.now().month
+        df_mesmo_mes = df[df['mes'] == mes_atual]
 
-        # Precipitação
-        if precip > 150:
-            score_climatico += 3
-        elif precip > 100:
-            score_climatico += 2
-        elif precip > 50:
-            score_climatico += 1
-
-        # Sazonalidade
-        if mes in [12, 1, 2, 3]:  # Verão (ALTÍSSIMO RISCO)
-            score_climatico += 3
-        elif mes in [10, 11]:  # Primavera (ALTO RISCO)
-            score_climatico += 2
-        elif mes in [4, 5]:  # Outono
-            score_climatico += 1
-
-        # Obter média histórica do mês (AGREGADA)
-        mes_atual = clima_atual['mes']
-        df_historico_mes = df_historico[df_historico['mes'] == mes_atual]
-
-        # Calcular total por ano
-        casos_por_ano = df_historico_mes.groupby('ano')['casos_dengue'].sum()
-        casos_historicos_mes = casos_por_ano.mean()
-
-        # Escalar predição para comparar
-        n_amostras = len(df_historico_mes) / len(df_historico['ano'].unique())
-        casos_previstos_escalados = predicao * n_amostras
-
-        # Calcular variação percentual
-        variacao_percentual = ((casos_previstos_escalados - casos_historicos_mes) / casos_historicos_mes * 100)
-
-        # CLASSIFICAÇÃO HÍBRIDA (Score Climático + Casos Previstos)
-
-        # 1. Se score climático for ALTO
-        if score_climatico >= 8:
-            # Condições muito favoráveis
-            if variacao_percentual > -30:  # Mesmo abaixo, se clima for crítico
-                risco_previsto = 'Alto'
-                alerta = '🔴 ALERTA: Condições climáticas críticas!'
-            else:
-                risco_previsto = 'Médio'
-                alerta = '🟡 ATENÇÃO: Clima favorável, mas casos muito abaixo do esperado'
-
-        elif score_climatico >= 5:
-            # Condições moderadas
-            if variacao_percentual > 20:
-                risco_previsto = 'Alto'
-                alerta = '🔴 ALERTA: Casos previstos muito acima da média!'
-            elif variacao_percentual > -20:
-                risco_previsto = 'Médio'
-                alerta = '🟡 ATENÇÃO: Casos dentro da faixa esperada'
-            else:
-                risco_previsto = 'Baixo'
-                alerta = '🟢 Normal: Casos abaixo da média'
-
+        if len(df_mesmo_mes) > 0:
+            media_historica = df_mesmo_mes['casos_dengue'].mean()
         else:
-            # Condições desfavoráveis
-            if variacao_percentual > 50:
-                risco_previsto = 'Médio'
-                alerta = '🟡 ATENÇÃO: Casos elevados apesar de clima desfavorável'
-            else:
-                risco_previsto = 'Baixo'
-                alerta = '🟢 Normal: Clima e casos dentro do esperado'
+            media_historica = df['casos_dengue'].mean()
+
+        # Variação percentual
+        if media_historica > 0:
+            variacao_pct = ((casos_previstos - media_historica) / media_historica) * 100
+        else:
+            variacao_pct = 0.0
+
+        # =====================================================
+        # 5. GERAR ALERTA BASEADO NA VARIAÇÃO
+        # =====================================================
+
+        if variacao_pct > 50:
+            alerta = "🚨 **ALERTA CRÍTICO:** Predição indica aumento MUITO SIGNIFICATIVO nos casos (+50% vs média histórica). Reforçar ações de prevenção!"
+        elif variacao_pct > 20:
+            alerta = "⚠️ **ATENÇÃO:** Predição indica aumento moderado nos casos (+20% vs média histórica). Monitorar de perto."
+        elif variacao_pct > 0:
+            alerta = "ℹ️ **LEVE AUMENTO:** Predição indica pequeno aumento nos casos vs média histórica. Manter vigilância."
+        elif variacao_pct > -20:
+            alerta = "✅ **ESTÁVEL/MELHORA:** Predição indica redução ou estabilidade nos casos. Continuar ações de prevenção."
+        else:
+            alerta = "🎉 **REDUÇÃO SIGNIFICATIVA:** Predição indica forte redução nos casos (-20% vs média). Ações de prevenção funcionando!"
+
+        # =====================================================
+        # 6. RETORNAR RESULTADO COMPLETO
+        # =====================================================
 
         return {
-            'casos_previstos': int(predicao),  # ← Individual
-            'intervalo_inferior': int(intervalo_inferior),
-            'intervalo_superior': int(intervalo_superior),
-            'risco_previsto': risco_previsto,
-            'alerta': alerta,
-            'confianca': self.r2,
+            'casos_previstos': float(casos_previstos),
+            'intervalo_inferior': float(intervalo_inferior),
+            'intervalo_superior': float(intervalo_superior),
+            'confianca': float(self.r2_score),
             'modelo_usado': self.melhor_modelo_nome,
-            'casos_historicos_media': int(casos_historicos_mes),  # ← Agregado
-            'variacao_percentual': variacao_percentual,
-            'score_climatico': score_climatico
+            'alerta': alerta,
+            'variacao_historico': float(variacao_pct),
+            'media_historica': float(media_historica),
+            'mes': mes_atual,
+            'ano': datetime.now().year
         }
-
-    def prever_proximos_meses(self, df_historico: pd.DataFrame,
-                              clima_futuro: list, n_meses: int = 3) -> pd.DataFrame:
-        #Prevê casos para os próximos N meses
-
-        predicoes = []
-
-        for i, clima in enumerate(clima_futuro[:n_meses]):
-            resultado = self.prever_mes_atual(df_historico, clima)
-
-            predicoes.append({
-                'mes': clima['mes'],
-                'ano': clima.get('ano', 2025),
-                'casos_previstos': resultado['casos_previstos'],
-                'intervalo_inferior': resultado['intervalo_inferior'],
-                'intervalo_superior': resultado['intervalo_superior'],
-                'risco_previsto': resultado['risco_previsto']
-            })
-
-        return pd.DataFrame(predicoes)
 
 
 def obter_clima_atual_estimado(estado_nome: str) -> dict:
+    """
+    Obtém clima atual estimado baseado em médias históricas
 
-    #Obtém clima atual estimado (você pode integrar com API real)
+    Args:
+        estado_nome: Nome do estado
 
-    from backend.config import PARAMETROS_CLIMA, ESTADOS_BRASIL
+    Returns:
+        Dict com clima estimado
+    """
 
-    # Obter mês atual
+    # Mês atual
     mes_atual = datetime.now().month
-    ano_atual = datetime.now().year
 
-    # Obter parâmetros da região
-    estado_info = ESTADOS_BRASIL[estado_nome]
-    regiao = estado_info['regiao']
-    params = PARAMETROS_CLIMA[regiao]
+    # Estimativas baseadas em médias brasileiras por região
+    # (Idealmente seria buscar API de clima em tempo real)
 
-    # Calcular fatores sazonais
-    if mes_atual in [12, 1, 2]:
-        fator_temp, fator_chuva = 1.15, 1.5
-    elif mes_atual in [3, 4]:
-        fator_temp, fator_chuva = 1.05, 1.3
-    elif mes_atual in [6, 7, 8]:
-        fator_temp, fator_chuva = 0.80, 0.5
-    else:
-        fator_temp, fator_chuva = 0.95, 0.9
+    climas_estimados = {
+        'São Paulo': {
+            1: {'temp': 24, 'umid': 75, 'precip': 200},  # Janeiro
+            2: {'temp': 25, 'umid': 73, 'precip': 180},
+            3: {'temp': 24, 'umid': 72, 'precip': 150},
+            4: {'temp': 22, 'umid': 70, 'precip': 80},
+            5: {'temp': 19, 'umid': 68, 'precip': 60},
+            6: {'temp': 18, 'umid': 66, 'precip': 50},
+            7: {'temp': 18, 'umid': 65, 'precip': 40},
+            8: {'temp': 20, 'umid': 64, 'precip': 45},
+            9: {'temp': 21, 'umid': 67, 'precip': 70},
+            10: {'temp': 22, 'umid': 70, 'precip': 110},
+            11: {'temp': 23, 'umid': 72, 'precip': 130},  # Novembro
+            12: {'temp': 24, 'umid': 74, 'precip': 170}
+        }
+    }
 
-    # Estimar clima atual
-    temp_media = params['temp_base'] * fator_temp
+    # Pegar clima do estado ou usar default
+    clima_mes = climas_estimados.get(estado_nome, climas_estimados['São Paulo']).get(mes_atual, {
+        'temp': 22, 'umid': 70, 'precip': 100
+    })
 
     return {
-        'temperatura_media': temp_media,
-        'temperatura_max': temp_media + 5,
-        'temperatura_min': temp_media - 5,
-        'umidade_relativa': params['umidade_base'],
-        'precipitacao': params['precip_base'] * fator_chuva,
-        'mes': mes_atual,
-        'ano': ano_atual
+        'temperatura_media': clima_mes['temp'],
+        'temperatura_max': clima_mes['temp'] + 5,
+        'temperatura_min': clima_mes['temp'] - 5,
+        'umidade_relativa': clima_mes['umid'],
+        'precipitacao': clima_mes['precip']
     }

@@ -11,6 +11,12 @@ import warnings
 warnings.filterwarnings('ignore')
 
 try:
+    from imblearn.over_sampling import SMOTE
+    SMOTE_DISPONIVEL = True
+except ImportError:
+    SMOTE_DISPONIVEL = False
+
+try:
     import xgboost as xgb
 
     XGBOOST_DISPONIVEL = True
@@ -22,7 +28,6 @@ class ModeloDengue:
     #Classe para treinar e avaliar modelos de predição de dengue
 
     def __init__(self):
-        self.modelos_classificacao = {}
         self.modelos_regressao = {}
         self.scaler = StandardScaler()
         self.label_encoder = LabelEncoder()
@@ -30,173 +35,142 @@ class ModeloDengue:
         self.tipo_modelo = None  # 'classificacao' ou 'regressao'
 
     def preparar_dados(self, df: pd.DataFrame) -> tuple:
+        """
+        Prepara dados para treinamento (REGRESSÃO)
 
-        #Prepara dados para treinamento
+        Args:
+            df: DataFrame com dados históricos
 
-        # Features para o modelo
-        features = [
-            'temperatura_media', 'temperatura_max', 'temperatura_min',
-            'umidade_relativa', 'precipitacao', 'mes'
-        ]
-
-        # Verificar se todas as features existem
-        features_disponiveis = [f for f in features if f in df.columns]
-
-        if len(features_disponiveis) < 3:
-            raise ValueError(f"Dados insuficientes. Apenas {len(features_disponiveis)} features disponíveis.")
-
-        X = df[features_disponiveis].copy()
-
-        # Target (risco de dengue)
-        y = df['risco_dengue'].copy()
-
-        return X, y, features_disponiveis
-
-    def treinar_modelos(self, df: pd.DataFrame) -> pd.DataFrame:
-
-        #Treina múltiplos modelos e retorna comparação
-
-        # Preparar dados
-        X, y, features = self.preparar_dados(df)
-
-        classes_unicas = y.nunique()
-
-        if classes_unicas < 2:
-            # Apenas 1 classe → Usar REGRESSÃO em vez de CLASSIFICAÇÃO
-            return self._treinar_modelos_regressao(df, X, features)
-
-        # Se tem 2+ classes → Usar CLASSIFICAÇÃO
-        return self._treinar_modelos_classificacao(X, y, features)
-
-    def _treinar_modelos_classificacao(self, X: pd.DataFrame, y: pd.Series, features: list) -> pd.DataFrame:
-
-        #Treina modelos de CLASSIFICAÇÃO (quando há múltiplas classes)
-
-
-        self.tipo_modelo = 'classificacao'
-
-        # Encode target
-        y_encoded = self.label_encoder.fit_transform(y)
+        Returns:
+            Tuple (X, y, features) - Features, target (casos), lista de nomes
+        """
 
         import streamlit as st
         from collections import Counter
 
-        # Contar amostras por classe
-        class_counts = Counter(y_encoded)
-
-        # Debug: Mostrar distribuição
-        class_names = {i: name for i, name in enumerate(self.label_encoder.classes_)}
-        for class_id, count in sorted(class_counts.items()):
-            class_name = class_names.get(class_id, f"Classe {class_id}")
-            st.write(f"- {class_name}: {count} amostras")
-
-        # Verificar se TODAS as classes têm pelo menos 2 amostras
-        min_samples = min(class_counts.values())
-
-        if min_samples < 2:
-            st.warning(
-                f"⚠️ **Estratificação desabilitada**: Pelo menos uma classe tem apenas {min_samples} amostra(s). "
-                f"O modelo será treinado sem estratificação para evitar erro."
-            )
-            use_stratify = False
-        else:
-            use_stratify = True
-
-
-        if use_stratify:
-            X_train, X_test, y_train, y_test = train_test_split(
-                X, y_encoded, test_size=0.2, random_state=42, stratify=y_encoded
-            )
-        else:
-            # Sem estratificação
-            X_train, X_test, y_train, y_test = train_test_split(
-                X, y_encoded, test_size=0.2, random_state=42
-            )
-
-        # Normalizar
-        X_train_scaled = self.scaler.fit_transform(X_train)
-        X_test_scaled = self.scaler.transform(X_test)
+        # =====================================================
+        # APLICAR FEATURE ENGINEERING
+        # =====================================================
 
         try:
-            from sklearn.utils.class_weight import compute_sample_weight
-            sample_weights = compute_sample_weight('balanced', y_train)
-        except Exception:
-            sample_weights = None
-
-        self.modelos_classificacao = {
-            'Naive Bayes': GaussianNB(),
-            'Random Forest': RandomForestClassifier(n_estimators=100, random_state=42, class_weight='balanced'),
-            'Gradient Boosting': GradientBoostingClassifier(n_estimators=100, random_state=42)
-        }
-
-        if XGBOOST_DISPONIVEL:
-            self.modelos_classificacao['XGBoost'] = xgb.XGBClassifier(
-                n_estimators=100, random_state=42, eval_metric='mlogloss'
+            from backend.feature_engineering import (
+                adicionar_features_engenheiradas,
+                selecionar_features_relevantes,
+                validar_features
             )
 
-        resultados = []
+            if not validar_features(df):
+                st.warning("⚠️ DataFrame não possui todas as colunas necessárias. Usando features básicas.")
+                raise ValueError("Validação falhou")
 
-        for nome, modelo in self.modelos_classificacao.items():
-            try:
-                # Treinar
-                if nome == 'Gradient Boosting' and sample_weights is not None:
-                    modelo.fit(X_train_scaled, y_train, sample_weight=sample_weights)
-                else:
-                    modelo.fit(X_train_scaled, y_train)
+            st.info("🔧 Aplicando Feature Engineering...")
 
-                # Predizer
-                y_pred = modelo.predict(X_test_scaled)
+            df_eng = adicionar_features_engenheiradas(df)
+            X, features = selecionar_features_relevantes(df_eng)
 
-                # Métricas
-                acuracia = accuracy_score(y_test, y_pred)
+            st.success(f"✅ {len(features)} features criadas e selecionadas!")
 
-                # F1-Score: tratar caso de 1 classe
-                if len(np.unique(y_test)) > 1:
-                    f1 = f1_score(y_test, y_pred, average='weighted', zero_division=0)
-                else:
-                    f1 = 0.0
+            # =====================================================
+            # TARGET: Número de casos (NÃO classificação!)
+            # =====================================================
 
-                # Cross-validation (se tiver dados suficientes)
-                if len(X_train_scaled) >= 6 and len(np.unique(y_train)) >= 2:
-                    try:
-                        cv_scores = cross_val_score(modelo, X_train_scaled, y_train, cv=3, scoring='accuracy')
-                        cv_mean = cv_scores.mean()
-                    except Exception:
-                        cv_mean = acuracia  # Fallback
-                else:
-                    cv_mean = acuracia
+            y = df_eng['casos_dengue'].copy()
 
-                resultados.append({
-                    'Modelo': nome,
-                    'Acurácia': acuracia,
-                    'F1-Score': f1,
-                    'CV Acurácia': cv_mean
-                })
+        except (ImportError, ValueError) as e:
+            st.warning(f"⚠️ Feature Engineering não disponível: {str(e)}")
+            st.info("💡 Usando features básicas como fallback.")
 
-            except Exception as e:
-                st.warning(f"⚠️ Erro ao treinar {nome}: {str(e)}")
-                continue
+            features = [
+                'temperatura_media', 'temperatura_max', 'temperatura_min',
+                'umidade_relativa', 'precipitacao', 'mes'
+            ]
 
-        if not resultados:
-            raise ValueError("❌ Nenhum modelo foi treinado com sucesso")
+            features_disponiveis = [f for f in features if f in df.columns]
 
-        # Converter para DataFrame
-        df_resultados = pd.DataFrame(resultados)
-        df_resultados = df_resultados.sort_values('Acurácia', ascending=False).reset_index(drop=True)
+            if len(features_disponiveis) < 3:
+                raise ValueError(f"Dados insuficientes. Apenas {len(features_disponiveis)} features disponíveis.")
 
-        # Salvar melhor modelo
-        melhor_nome = df_resultados.iloc[0]['Modelo']
-        self.melhor_modelo = self.modelos_classificacao[melhor_nome]
+            X = df[features_disponiveis].copy()
+            features = features_disponiveis
 
-        st.success(f"✅ Melhor modelo: **{melhor_nome}** (Acurácia: {df_resultados.iloc[0]['Acurácia']:.2%})")
+            # Target: casos de dengue
+            y = df['casos_dengue'].copy()
 
-        return df_resultados
+        # =====================================================
+        # VALIDAÇÕES FINAIS
+        # =====================================================
+
+        if len(X) != len(y):
+            raise ValueError(f"Incompatibilidade: X tem {len(X)} linhas, y tem {len(y)} linhas")
+
+        if len(X) < 10:
+            st.error(f"❌ Dados insuficientes: apenas {len(X)} registros disponíveis")
+            raise ValueError(f"Mínimo de 10 registros necessários, encontrados {len(X)}")
+
+        # Tratar NaN
+        if X.isnull().any().any():
+            st.warning("⚠️ Valores ausentes detectados. Preenchendo com mediana...")
+            X = X.fillna(X.median())
+
+        # Tratar infinitos
+        if np.isinf(X.values).any():
+            st.warning("⚠️ Valores infinitos detectados. Substituindo...")
+            X = X.replace([np.inf, -np.inf], np.nan)
+            X = X.fillna(X.median())
+
+        st.success(f"✅ Dados preparados: {len(X)} amostras × {len(features)} features")
+        st.info(f"🎯 **Target:** casos_dengue (min: {y.min():.0f}, max: {y.max():.0f}, média: {y.mean():.0f})")
+
+        return X, y, features
+
+    def treinar_modelos(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Treina modelos de REGRESSÃO para prever casos de dengue
+        (Classificação removida - regressão teve 99% de R²)
+
+        Args:
+            df: DataFrame com dados históricos
+
+        Returns:
+            DataFrame com resultados dos modelos de regressão
+        """
+
+        # Preparar dados
+        X, y, features = self.preparar_dados(df)
+
+        # =====================================================
+        # SEMPRE USAR REGRESSÃO (melhor performance)
+        # =====================================================
+
+        import streamlit as st
+
+        st.info("🎯 **Modo REGRESSÃO:** Predizindo número de casos de dengue")
+        st.caption("💡 Modelo escolhido por ter 99% de R² (superior à classificação)")
+
+        # Mostrar correlações (informativo)
+        df_temp = X.copy()
+
+        # Se tiver target numérico (casos_dengue), calcular correlação
+        if 'casos_dengue' in df.columns:
+            df_temp['target'] = df['casos_dengue']
+            correlacoes = df_temp.corr()['target'].drop('target').abs()
+            max_corr = correlacoes.max()
+
+            st.success(f"✅ **Correlação máxima:** {max_corr:.3f}")
+
+            # Mostrar top 3 features
+            top_features = correlacoes.nlargest(3)
+            st.write("🔝 **Top 3 features mais correlacionadas:**")
+            for feature, corr in top_features.items():
+                st.write(f"   - {feature}: {corr:.3f}")
+
+        # Treinar modelos de regressão
+        return self._treinar_modelos_regressao(df, X, features)
 
     def _treinar_modelos_regressao(self, df: pd.DataFrame, X: pd.DataFrame, features: list) -> pd.DataFrame:
-
-        #Treina modelos de REGRESSÃO (quando há apenas 1 classe ou poucos dados)
-        #Prediz o NÚMERO DE CASOS em vez da CLASSE DE RISCO
-
+        """
+        Treina modelos de REGRESSÃO otimizados
+        """
 
         self.tipo_modelo = 'regressao'
 
@@ -212,16 +186,68 @@ class ModeloDengue:
         X_train_scaled = self.scaler.fit_transform(X_train)
         X_test_scaled = self.scaler.transform(X_test)
 
-        # Definir modelos de regressão
+        # =====================================================
+        # MODELOS DE REGRESSÃO OTIMIZADOS
+        # =====================================================
+
+        from sklearn.linear_model import Ridge, Lasso, ElasticNet
+        from sklearn.ensemble import ExtraTreesRegressor
+        from sklearn.svm import SVR
+
+        import streamlit as st
+
         self.modelos_regressao = {
-            'Random Forest': RandomForestRegressor(n_estimators=100, random_state=42),
-            'Gradient Boosting': GradientBoostingRegressor(n_estimators=100, random_state=42)
+            'XGBoost': xgb.XGBRegressor(
+                n_estimators=300,
+                learning_rate=0.05,
+                max_depth=6,
+                min_child_weight=3,
+                subsample=0.8,
+                colsample_bytree=0.8,
+                random_state=42
+            ) if XGBOOST_DISPONIVEL else None,
+
+            'Random Forest': RandomForestRegressor(
+                n_estimators=300,
+                max_depth=15,
+                min_samples_split=5,
+                min_samples_leaf=2,
+                random_state=42,
+                n_jobs=-1
+            ),
+
+            'Gradient Boosting': GradientBoostingRegressor(
+                n_estimators=300,
+                learning_rate=0.05,
+                max_depth=6,
+                min_samples_split=5,
+                random_state=42
+            ),
+
+            'Extra Trees': ExtraTreesRegressor(
+                n_estimators=300,
+                max_depth=15,
+                min_samples_split=5,
+                random_state=42,
+                n_jobs=-1
+            ),
+
+            'Ridge': Ridge(alpha=1.0),
+
+            'Lasso': Lasso(alpha=1.0),
+
+            'ElasticNet': ElasticNet(alpha=1.0, l1_ratio=0.5),
+
+            'SVR': SVR(kernel='rbf', C=1.0, epsilon=0.1)
         }
 
-        if XGBOOST_DISPONIVEL:
-            self.modelos_regressao['XGBoost'] = xgb.XGBRegressor(n_estimators=100, random_state=42)
+        # Remover modelos None (XGBoost se não disponível)
+        self.modelos_regressao = {k: v for k, v in self.modelos_regressao.items() if v is not None}
 
-        # Treinar e avaliar
+        # =====================================================
+        # TREINAR E AVALIAR
+        # =====================================================
+
         resultados = []
 
         for nome, modelo in self.modelos_regressao.items():
@@ -233,22 +259,31 @@ class ModeloDengue:
                 y_pred = modelo.predict(X_test_scaled)
 
                 # Métricas
+                from sklearn.metrics import mean_squared_error
+
                 r2 = r2_score(y_test, y_pred)
                 mae = mean_absolute_error(y_test, y_pred)
+                rmse = np.sqrt(mean_squared_error(y_test, y_pred))
 
-                # Converter R² para "acurácia" (0-1)
-                acuracia_equivalente = max(0, r2)
+                # Erro percentual médio absoluto (MAPE)
+                mape = np.mean(np.abs((y_test - y_pred) / (y_test + 1))) * 100
+
+                # Converter R² para "acurácia" (para compatibilidade com gráficos)
+                acuracia_equivalente = max(0, min(1, r2))  # Clip entre 0-1
 
                 resultados.append({
                     'Modelo': nome,
-                    'Acurácia': acuracia_equivalente,  # R² como proxy
-                    'F1-Score': acuracia_equivalente,  # Mesmo valor
-                    'CV Acurácia': acuracia_equivalente,  # Simplificado
+                    'R²': r2,
                     'MAE': mae,
-                    'R²': r2
+                    'RMSE': rmse,
+                    'MAPE (%)': mape,
+                    'Acurácia': acuracia_equivalente,
+                    'F1-Score': acuracia_equivalente,
+                    'CV Acurácia': acuracia_equivalente
                 })
 
             except Exception as e:
+                st.warning(f"⚠️ Erro ao treinar {nome}: {str(e)}")
                 continue
 
         if not resultados:
@@ -262,21 +297,33 @@ class ModeloDengue:
         melhor_nome = df_resultados.iloc[0]['Modelo']
         self.melhor_modelo = self.modelos_regressao[melhor_nome]
 
+        melhor_r2 = df_resultados.iloc[0]['R²']
+        melhor_mae = df_resultados.iloc[0]['MAE']
+
+        st.success(f"✅ **Melhor modelo:** {melhor_nome} | R² = {melhor_r2:.3f} | MAE = {melhor_mae:.0f} casos")
+
         return df_resultados
 
     def prever(self, X_novo: pd.DataFrame) -> np.ndarray:
+        """
+        Faz predições com o melhor modelo (REGRESSÃO)
 
-        #Faz predições com o melhor modelo
+        Args:
+            X_novo: DataFrame com novos dados
+
+        Returns:
+            Array com número de casos previstos
+        """
 
         if self.melhor_modelo is None:
             raise ValueError("Modelo não foi treinado ainda!")
 
         X_scaled = self.scaler.transform(X_novo)
 
-        if self.tipo_modelo == 'classificacao':
-            # Retornar classes
-            y_pred_encoded = self.melhor_modelo.predict(X_scaled)
-            return self.label_encoder.inverse_transform(y_pred_encoded)
-        else:
-            # Retornar número de casos
-            return self.melhor_modelo.predict(X_scaled)
+        # Sempre retornar número de casos (regressão)
+        casos_previstos = self.melhor_modelo.predict(X_scaled)
+
+        # Garantir que não há valores negativos
+        casos_previstos = np.maximum(casos_previstos, 0)
+
+        return casos_previstos

@@ -92,10 +92,9 @@ def main():
         st.markdown("---")
 
         # Tabs com análises (COM TAB DE PREDIÇÃO)
-        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        tab1, tab2, tab3, tab4 = st.tabs([
             "📈 Análise Temporal",
             "🌡️ Indicadores Climáticos",
-            "🎯 Análise de Risco",
             "🤖 Modelo Preditivo",
             "🔮 Predição Mês Atual"
         ])
@@ -219,50 +218,8 @@ def main():
             except Exception as e:
                 st.error(f"❌ Erro ao gerar estatísticas: {str(e)}")
 
-        # TAB 3: Análise de Risco
+        # TAB 3: Modelo Preditivo
         with tab3:
-            st.markdown("### 🔥 Análise de Risco de Dengue")
-
-            # Gráfico de Distribuição de Risco (centralizado)
-            try:
-                st.plotly_chart(
-                    criar_grafico_distribuicao_risco(df, estado_selecionado),
-                    use_container_width=True
-                )
-            except Exception as e:
-                st.error(f"❌ Erro ao criar gráfico de risco: {str(e)}")
-                st.exception(e)
-
-            st.markdown("---")
-
-            # Estatísticas por Nível de Risco
-            st.markdown("#### 📊 Estatísticas por Nível de Risco")
-
-            try:
-                for risco in ['Alto', 'Médio', 'Baixo']:
-                    if risco in df['risco_dengue'].values:
-                        df_risco = df[df['risco_dengue'] == risco]
-
-                        col1, col2, col3, col4 = st.columns(4)
-
-                        with col1:
-                            emoji = CORES_RISCO_EMOJI.get(risco, '⚪')
-                            st.markdown(f"**{emoji} {risco}:**")
-
-                        with col2:
-                            st.metric("Ocorrências", f"{len(df_risco)}")
-
-                        with col3:
-                            st.metric("Total Casos", f"{df_risco['casos_dengue'].sum():,}")
-
-                        with col4:
-                            st.metric("Média Casos", f"{df_risco['casos_dengue'].mean():.0f}")
-
-            except Exception as e:
-                st.error(f"❌ Erro ao calcular estatísticas de risco: {str(e)}")
-
-        # TAB 4: Modelo Preditivo
-        with tab4:
             st.markdown("### 🤖 Treinamento do Modelo Preditivo")
 
             with st.spinner("Treinando modelos de Machine Learning..."):
@@ -333,138 +290,97 @@ def main():
             except Exception as e:
                 st.dataframe(df_resultados, use_container_width=True)
 
-        # TAB 5: Predição do Mês Atual
-        with tab5:
-            st.markdown("### 🔮 Predição de Casos para o Mês Atual")
+            with tab4:
+                st.markdown("### 🔮 Predição de Casos para o Mês Atual")
 
-            with st.spinner("🤖 Treinando modelo preditivo..."):
                 try:
-                    # Criar modelo de predição
+                    # Criar e treinar modelo
                     modelo_predicao = PredicaoDengue()
-
-                    # Treinar com dados históricos
                     resultado_treino = modelo_predicao.treinar_modelo(df)
 
-                    # Obter clima atual (estimado)
+                    # Obter clima e fazer predição
                     clima_atual = obter_clima_atual_estimado(estado_selecionado)
-
-                    # Fazer predição
                     predicao = modelo_predicao.prever_mes_atual(df, clima_atual)
+
+                    # Exibir resultado SIMPLES
+                    st.success("✅ Predição concluída!")
+
+                    col1, col2 = st.columns(2)
+
+                    with col1:
+                        st.metric(
+                            "Casos Previstos",
+                            f"{int(predicao['casos_previstos']):,}",
+                            f"Intervalo: {int(predicao['intervalo_inferior']):,} - {int(predicao['intervalo_superior']):,}"
+                        )
+
+                    with col2:
+                        st.metric(
+                            "Modelo Usado",
+                            predicao['modelo_usado'],
+                            f"R²: {predicao['confianca']:.3f}"
+                        )
+
+                    st.info(predicao['alerta'])
+
+                    # Detalhes
+                    with st.expander("📊 Detalhes da Predição"):
+                        st.json(predicao)
+
+                    with st.expander("📈 Resultados do Treino"):
+                        st.dataframe(resultado_treino['resultados'])
 
                 except Exception as e:
                     st.error(f"❌ Erro na predição: {str(e)}")
                     st.exception(e)
 
-            # Exibir resultados
-            if 'predicao' in locals():
+            # Gráficos de predição
+            col1, col2 = st.columns(2)
 
-                # Total de amostras por mês no dataset
-                df_mes_atual = df[df['mes'] == datetime.now().month]
-                n_amostras_mes = len(df_mes_atual)
-                n_anos_dados = len(df['ano'].unique())
-
-                # Casos agregados (soma de todas as localidades simuladas)
-                casos_agregados_mes = df_mes_atual.groupby('ano')['casos_dengue'].sum().mean()
-
-                # Escalar predição para ser comparável
-                if n_anos_dados > 0:
-                    amostras_por_mes = n_amostras_mes / n_anos_dados
-                else:
-                    amostras_por_mes = 1
-
-                casos_previstos_total = int(predicao['casos_previstos'] * amostras_por_mes)
-                intervalo_inf_total = int(predicao['intervalo_inferior'] * amostras_por_mes)
-                intervalo_sup_total = int(predicao['intervalo_superior'] * amostras_por_mes)
-
-                st.markdown(f"""
-                <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                            padding: 30px; border-radius: 15px; color: white; margin-bottom: 30px;'>
-                    <h2 style='margin: 0; color: white;'>🔮 Predição para {datetime.now().strftime('%B/%Y')}</h2>
-                    <hr style='border-color: rgba(255,255,255,0.3); margin: 20px 0;'>
-                    <div style='display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px;'>
-                        <div>
-                            <p style='margin: 0; opacity: 0.9; font-size: 14px;'>CASOS PREVISTOS (TOTAL)</p>
-                            <h1 style='margin: 10px 0; font-size: 48px;'>{casos_previstos_total:,}</h1>
-                            <p style='margin: 0; opacity: 0.8; font-size: 12px;'>
-                                Intervalo: {intervalo_inf_total:,} - {intervalo_sup_total:,}
-                            </p>
-                        </div>
-                        <div>
-                            <p style='margin: 0; opacity: 0.9; font-size: 14px;'>RISCO PREVISTO</p>
-                            <h1 style='margin: 10px 0; font-size: 48px;'>{predicao['risco_previsto']}</h1>
-                            <p style='margin: 0; opacity: 0.8; font-size: 12px;'>
-                                Modelo: {predicao['modelo_usado']}
-                            </p>
-                        </div>
-                        <div>
-                            <p style='margin: 0; opacity: 0.9; font-size: 14px;'>VARIAÇÃO vs HISTÓRICO</p>
-                            <h1 style='margin: 10px 0; font-size: 48px;'>
-                                {((casos_previstos_total - casos_agregados_mes) / casos_agregados_mes * 100):+.1f}%
-                            </h1>
-                            <p style='margin: 0; opacity: 0.8; font-size: 12px;'>
-                                Confiança (R²): {predicao['confianca']:.2%}
-                            </p>
-                        </div>
-                    </div>
-                    <div style='margin-top: 20px; padding: 15px; background: rgba(255,255,255,0.1); 
-                                border-radius: 10px; font-size: 16px;'>
-                        {predicao['alerta']}
-                    </div>
-                    <div style='margin-top: 15px; padding: 15px; background: rgba(255,255,255,0.05); 
-                                border-radius: 10px; font-size: 14px; opacity: 0.9;'>
-                        💡 <b>Metodologia:</b> Predição baseada em {int(amostras_por_mes)} localidades simuladas | 
-                        Média histórica: <b>{int(casos_agregados_mes):,}</b> casos/mês
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-
-                # Gráficos de predição
-                col1, col2 = st.columns(2)
-
-                with col1:
-                    st.plotly_chart(
-                        criar_grafico_predicao_mes_atual(predicao, estado_selecionado),
-                        use_container_width=True
-                    )
-
-                with col2:
-                    st.plotly_chart(
-                        criar_grafico_comparacao_predicao_historico(predicao, df),
-                        use_container_width=True
-                    )
-
-                # Série temporal com predição
+            with col1:
                 st.plotly_chart(
-                    criar_grafico_serie_temporal_com_predicao(df, predicao, estado_selecionado),
+                    criar_grafico_predicao_mes_atual(predicao, estado_selecionado),
                     use_container_width=True
                 )
 
-                # Métricas do modelo
-                st.markdown("---")
-                st.markdown("### 📊 Métricas do Modelo Preditivo")
+            with col2:
+                st.plotly_chart(
+                    criar_grafico_comparacao_predicao_historico(predicao, df),
+                    use_container_width=True
+                )
 
-                col1, col2, col3 = st.columns(3)
+            # Série temporal com predição
+            st.plotly_chart(
+                criar_grafico_serie_temporal_com_predicao(df, predicao, estado_selecionado),
+                use_container_width=True
+            )
 
-                with col1:
-                    st.metric("Modelo Usado", predicao['modelo_usado'])
+            # Métricas do modelo
+            st.markdown("---")
+            st.markdown("### 📊 Métricas do Modelo Preditivo")
 
-                with col2:
-                    st.metric("R² Score", f"{predicao['confianca']:.3f}")
+            col1, col2, col3 = st.columns(3)
 
-                with col3:
-                    mae = resultado_treino['mae']
-                    st.metric("Erro Médio (MAE)", f"{mae:.0f} casos")
+            with col1:
+                st.metric("Modelo Usado", predicao['modelo_usado'])
 
-                # Tabela com resultados de treino
-                with st.expander("📈 Ver Desempenho de Todos os Modelos"):
-                    st.dataframe(
-                        resultado_treino['resultados'].style.format({
-                            'MAE': '{:.2f}',
-                            'R²': '{:.3f}',
-                            'RMSE': '{:.2f}'
-                        }),
-                        use_container_width=True
-                    )
+            with col2:
+                st.metric("R² Score", f"{predicao['confianca']:.3f}")
+
+            with col3:
+                mae = resultado_treino['mae']
+                st.metric("Erro Médio (MAE)", f"{mae:.0f} casos")
+
+            # Tabela com resultados de treino
+            with st.expander("📈 Ver Desempenho de Todos os Modelos"):
+                st.dataframe(
+                    resultado_treino['resultados'].style.format({
+                        'MAE': '{:.2f}',
+                        'R²': '{:.3f}',
+                        'RMSE': '{:.2f}'
+                    }),
+                    use_container_width=True
+                )
 
         # Dados brutos (expansível)
         with st.expander("📋 Ver Dados Brutos"):
