@@ -35,22 +35,8 @@ class ModeloDengue:
         self.tipo_modelo = None  # 'classificacao' ou 'regressao'
 
     def preparar_dados(self, df: pd.DataFrame) -> tuple:
-        """
-        Prepara dados para treinamento (REGRESSÃO)
-
-        Args:
-            df: DataFrame com dados históricos
-
-        Returns:
-            Tuple (X, y, features) - Features, target (casos), lista de nomes
-        """
-
         import streamlit as st
         from collections import Counter
-
-        # =====================================================
-        # APLICAR FEATURE ENGINEERING
-        # =====================================================
 
         try:
             from backend.feature_engineering import (
@@ -63,16 +49,8 @@ class ModeloDengue:
                 st.warning("⚠️ DataFrame não possui todas as colunas necessárias. Usando features básicas.")
                 raise ValueError("Validação falhou")
 
-            st.info("🔧 Aplicando Feature Engineering...")
-
             df_eng = adicionar_features_engenheiradas(df)
             X, features = selecionar_features_relevantes(df_eng)
-
-            st.success(f"✅ {len(features)} features criadas e selecionadas!")
-
-            # =====================================================
-            # TARGET: Número de casos (NÃO classificação!)
-            # =====================================================
 
             y = df_eng['casos_dengue'].copy()
 
@@ -96,9 +74,6 @@ class ModeloDengue:
             # Target: casos de dengue
             y = df['casos_dengue'].copy()
 
-        # =====================================================
-        # VALIDAÇÕES FINAIS
-        # =====================================================
 
         if len(X) != len(y):
             raise ValueError(f"Incompatibilidade: X tem {len(X)} linhas, y tem {len(y)} linhas")
@@ -118,34 +93,14 @@ class ModeloDengue:
             X = X.replace([np.inf, -np.inf], np.nan)
             X = X.fillna(X.median())
 
-        st.success(f"✅ Dados preparados: {len(X)} amostras × {len(features)} features")
-        st.info(f"🎯 **Target:** casos_dengue (min: {y.min():.0f}, max: {y.max():.0f}, média: {y.mean():.0f})")
-
         return X, y, features
 
     def treinar_modelos(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Treina modelos de REGRESSÃO para prever casos de dengue
-        (Classificação removida - regressão teve 99% de R²)
-
-        Args:
-            df: DataFrame com dados históricos
-
-        Returns:
-            DataFrame com resultados dos modelos de regressão
-        """
 
         # Preparar dados
         X, y, features = self.preparar_dados(df)
 
-        # =====================================================
-        # SEMPRE USAR REGRESSÃO (melhor performance)
-        # =====================================================
-
         import streamlit as st
-
-        st.info("🎯 **Modo REGRESSÃO:** Predizindo número de casos de dengue")
-        st.caption("💡 Modelo escolhido por ter 99% de R² (superior à classificação)")
 
         # Mostrar correlações (informativo)
         df_temp = X.copy()
@@ -156,11 +111,8 @@ class ModeloDengue:
             correlacoes = df_temp.corr()['target'].drop('target').abs()
             max_corr = correlacoes.max()
 
-            st.success(f"✅ **Correlação máxima:** {max_corr:.3f}")
-
             # Mostrar top 3 features
             top_features = correlacoes.nlargest(3)
-            st.write("🔝 **Top 3 features mais correlacionadas:**")
             for feature, corr in top_features.items():
                 st.write(f"   - {feature}: {corr:.3f}")
 
@@ -168,9 +120,6 @@ class ModeloDengue:
         return self._treinar_modelos_regressao(df, X, features)
 
     def _treinar_modelos_regressao(self, df: pd.DataFrame, X: pd.DataFrame, features: list) -> pd.DataFrame:
-        """
-        Treina modelos de REGRESSÃO otimizados
-        """
 
         self.tipo_modelo = 'regressao'
 
@@ -185,10 +134,6 @@ class ModeloDengue:
         # Normalizar
         X_train_scaled = self.scaler.fit_transform(X_train)
         X_test_scaled = self.scaler.transform(X_test)
-
-        # =====================================================
-        # MODELOS DE REGRESSÃO OTIMIZADOS
-        # =====================================================
 
         from sklearn.linear_model import Ridge, Lasso, ElasticNet
         from sklearn.ensemble import ExtraTreesRegressor
@@ -243,10 +188,6 @@ class ModeloDengue:
 
         # Remover modelos None (XGBoost se não disponível)
         self.modelos_regressao = {k: v for k, v in self.modelos_regressao.items() if v is not None}
-
-        # =====================================================
-        # TREINAR E AVALIAR
-        # =====================================================
 
         resultados = []
 
@@ -305,15 +246,6 @@ class ModeloDengue:
         return df_resultados
 
     def prever(self, X_novo: pd.DataFrame) -> np.ndarray:
-        """
-        Faz predições com o melhor modelo (REGRESSÃO)
-
-        Args:
-            X_novo: DataFrame com novos dados
-
-        Returns:
-            Array com número de casos previstos
-        """
 
         if self.melhor_modelo is None:
             raise ValueError("Modelo não foi treinado ainda!")

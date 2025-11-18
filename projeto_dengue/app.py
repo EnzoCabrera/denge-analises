@@ -38,7 +38,7 @@ st.set_page_config(
 )
 
 def main():
-    #Função principal da aplicação
+    """Função principal da aplicação"""
 
     # Aplicar estilos
     aplicar_estilos()
@@ -71,7 +71,7 @@ def main():
                 st.exception(e)
                 return
 
-        # Informação sobre fonte de dados (antiga)
+        # Informação sobre fonte de dados
         renderizar_info_dados(
             st.session_state.get('dados_reais', False),
             st.session_state.get('total_registros', 0)
@@ -79,19 +79,12 @@ def main():
 
         st.markdown("---")
 
-        df = gerar_dados_estado(estado_selecionado, n_anos, usar_dados_reais=True)
-
-        if df.empty:
-            st.error("❌ Não foi possível carregar dados REAIS para este estado/período.")
-            st.info("💡 Tente outro estado ou período de análise.")
-            st.stop()
-
         # Renderizar KPIs
         renderizar_kpis(stats)
 
         st.markdown("---")
 
-        # Tabs com análises (COM TAB DE PREDIÇÃO)
+        # Tabs com análises
         tab1, tab2, tab3, tab4 = st.tabs([
             "📈 Análise Temporal",
             "🌡️ Indicadores Climáticos",
@@ -103,7 +96,6 @@ def main():
         with tab1:
             st.markdown("### 📈 Evolução Temporal dos Casos")
 
-            # Série temporal de casos
             try:
                 st.plotly_chart(
                     criar_grafico_casos_temporal(df, estado_selecionado),
@@ -114,7 +106,6 @@ def main():
 
             st.markdown("---")
 
-            # Tendência anual (centralizado)
             try:
                 st.plotly_chart(
                     criar_grafico_tendencia_anual(df, estado_selecionado),
@@ -125,40 +116,26 @@ def main():
 
             st.markdown("---")
 
-            # Estatísticas resumidas
             st.markdown("#### 📊 Resumo Estatístico")
 
             col1, col2, col3, col4 = st.columns(4)
 
             with col1:
-                st.metric(
-                    "Total de Casos",
-                    f"{df['casos_dengue'].sum():,}"
-                )
+                st.metric("Total de Casos", f"{df['casos_dengue'].sum():,}")
 
             with col2:
-                st.metric(
-                    "Média Mensal",
-                    f"{df['casos_dengue'].mean():,.0f}"
-                )
+                st.metric("Média Mensal", f"{df['casos_dengue'].mean():,.0f}")
 
             with col3:
-                st.metric(
-                    "Maior Surto",
-                    f"{df['casos_dengue'].max():,}"
-                )
+                st.metric("Maior Surto", f"{df['casos_dengue'].max():,}")
 
             with col4:
-                st.metric(
-                    "Menor Registro",
-                    f"{df['casos_dengue'].min():,}"
-                )
+                st.metric("Menor Registro", f"{df['casos_dengue'].min():,}")
 
         # TAB 2: Análise Climática
         with tab2:
             st.markdown("### 🌤️ Análise de Fatores Climáticos")
 
-            # KPIs Climáticos
             st.markdown("#### 📊 Resumo Climático do Período")
 
             col1, col2, col3 = st.columns(3)
@@ -166,33 +143,20 @@ def main():
             with col1:
                 temp_media = df['temperatura_media'].mean()
                 temp_std = df['temperatura_media'].std()
-                st.metric(
-                    "🌡️ Temperatura Média",
-                    f"{temp_media:.1f}°C",
-                    f"± {temp_std:.1f}°C"
-                )
+                st.metric("🌡️ Temperatura Média", f"{temp_media:.1f}°C", f"± {temp_std:.1f}°C")
 
             with col2:
                 umid_media = df['umidade_relativa'].mean()
                 umid_std = df['umidade_relativa'].std()
-                st.metric(
-                    "💧 Umidade Relativa Média",
-                    f"{umid_media:.1f}%",
-                    f"± {umid_std:.1f}%"
-                )
+                st.metric("💧 Umidade Relativa Média", f"{umid_media:.1f}%", f"± {umid_std:.1f}%")
 
             with col3:
                 precip_media = df['precipitacao'].mean()
                 precip_std = df['precipitacao'].std()
-                st.metric(
-                    "☔ Precipitação Média",
-                    f"{precip_media:.1f}mm/mês",
-                    f"± {precip_std:.1f}mm"
-                )
+                st.metric("☔ Precipitação Média", f"{precip_media:.1f}mm/mês", f"± {precip_std:.1f}mm")
 
             st.markdown("---")
 
-            # GRÁFICO PRINCIPAL: Indicadores Climáticos (SEM Precipitação)
             try:
                 st.plotly_chart(
                     criar_grafico_clima(df, estado_selecionado),
@@ -200,11 +164,9 @@ def main():
                 )
             except Exception as e:
                 st.error(f"❌ Erro ao criar gráfico climático: {str(e)}")
-                st.exception(e)
 
             st.markdown("---")
 
-            # Tabela com resumo estatístico
             st.markdown("#### 📋 Estatísticas Detalhadas")
 
             try:
@@ -240,11 +202,10 @@ def main():
                 st.info("""
                 ℹ️ **Modelo de Regressão Ativado**
 
-                Como os dados apresentam apenas uma classe de risco ou poucos dados,
+                Como os dados apresentam correlação baixa entre features e target,
                 o sistema está usando **modelos de regressão** para prever o **número de casos**
                 em vez da classificação de risco.
                 """)
-
 
             col1, col2 = st.columns([2, 1])
 
@@ -255,20 +216,18 @@ def main():
                         use_container_width=True
                     )
                 except Exception as e:
-                    st.error(f"Erro ao criar gráfico de modelos: {str(e)}")
+                    st.error(f"❌ Erro ao criar gráfico de modelos: {str(e)}")
 
             with col2:
                 try:
                     renderizar_ranking_modelos(df_resultados)
                 except Exception as e:
-                    st.error(f"Erro ao renderizar ranking: {str(e)}")
+                    st.error(f"❌ Erro ao renderizar ranking: {str(e)}")
 
-            # Métricas adicionais
             st.markdown("---")
             st.markdown("### 📊 Métricas Detalhadas")
 
             try:
-                # Formatar baseado no tipo de modelo
                 if modelo.tipo_modelo == 'regressao':
                     st.dataframe(
                         df_resultados.style.format({
@@ -290,97 +249,90 @@ def main():
             except Exception as e:
                 st.dataframe(df_resultados, use_container_width=True)
 
-            with tab4:
-                st.markdown("### 🔮 Predição de Casos para o Mês Atual")
+        # TAB 4: Predição do Mês Atual
+        with tab4:
+            st.markdown("### 🔮 Predição de Casos para o Mês Atual")
 
-                try:
-                    # Criar e treinar modelo
+            try:
+                with st.spinner("🤖 Gerando predição..."):
                     modelo_predicao = PredicaoDengue()
                     resultado_treino = modelo_predicao.treinar_modelo(df)
-
-                    # Obter clima e fazer predição
                     clima_atual = obter_clima_atual_estimado(estado_selecionado)
                     predicao = modelo_predicao.prever_mes_atual(df, clima_atual)
 
-                    # Exibir resultado SIMPLES
-                    st.success("✅ Predição concluída!")
+                # Métricas principais
+                col1, col2 = st.columns(2)
 
-                    col1, col2 = st.columns(2)
+                with col1:
+                    st.metric(
+                        "Casos Previstos",
+                        f"{int(predicao['casos_previstos']):,}",
+                        f"Intervalo: {int(predicao['intervalo_inferior']):,} - {int(predicao['intervalo_superior']):,}"
+                    )
 
-                    with col1:
-                        st.metric(
-                            "Casos Previstos",
-                            f"{int(predicao['casos_previstos']):,}",
-                            f"Intervalo: {int(predicao['intervalo_inferior']):,} - {int(predicao['intervalo_superior']):,}"
+                with col2:
+                    st.metric(
+                        "Modelo Usado",
+                        predicao['modelo_usado'],
+                        f"R²: {predicao['confianca']:.3f}"
+                    )
+
+                # Gráficos
+                st.markdown("---")
+                st.markdown("### 📊 Visualizações")
+
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    try:
+                        st.plotly_chart(
+                            criar_grafico_predicao_mes_atual(predicao, estado_selecionado),
+                            use_container_width=True
                         )
+                    except:
+                        pass
 
-                    with col2:
-                        st.metric(
-                            "Modelo Usado",
-                            predicao['modelo_usado'],
-                            f"R²: {predicao['confianca']:.3f}"
+                with col2:
+                    try:
+                        st.plotly_chart(
+                            criar_grafico_comparacao_predicao_historico(predicao, df),
+                            use_container_width=True
                         )
+                    except:
+                        pass
 
-                    st.info(predicao['alerta'])
+                try:
+                    st.plotly_chart(
+                        criar_grafico_serie_temporal_com_predicao(df, predicao, estado_selecionado),
+                        use_container_width=True
+                    )
+                except:
+                    pass
 
-                    # Detalhes
-                    with st.expander("📊 Detalhes da Predição"):
-                        st.json(predicao)
+                # Métricas do modelo
+                st.markdown("---")
+                st.markdown("### 📈 Métricas do Modelo")
 
-                    with st.expander("📈 Resultados do Treino"):
-                        st.dataframe(resultado_treino['resultados'])
+                col1, col2, col3 = st.columns(3)
 
-                except Exception as e:
-                    st.error(f"❌ Erro na predição: {str(e)}")
-                    st.exception(e)
+                with col1:
+                    st.metric("Modelo", predicao['modelo_usado'])
 
-            # Gráficos de predição
-            col1, col2 = st.columns(2)
+                with col2:
+                    st.metric("R² Score", f"{predicao['confianca']:.3f}")
 
-            with col1:
-                st.plotly_chart(
-                    criar_grafico_predicao_mes_atual(predicao, estado_selecionado),
-                    use_container_width=True
-                )
+                with col3:
+                    st.metric("Erro Médio (MAE)", f"{resultado_treino['mae']:.0f} casos")
 
-            with col2:
-                st.plotly_chart(
-                    criar_grafico_comparacao_predicao_historico(predicao, df),
-                    use_container_width=True
-                )
+                # Detalhes
+                with st.expander("📊 Detalhes da Predição"):
+                    st.json(predicao)
 
-            # Série temporal com predição
-            st.plotly_chart(
-                criar_grafico_serie_temporal_com_predicao(df, predicao, estado_selecionado),
-                use_container_width=True
-            )
+                with st.expander("📈 Resultados do Treino"):
+                    st.dataframe(resultado_treino['resultados'])
 
-            # Métricas do modelo
-            st.markdown("---")
-            st.markdown("### 📊 Métricas do Modelo Preditivo")
-
-            col1, col2, col3 = st.columns(3)
-
-            with col1:
-                st.metric("Modelo Usado", predicao['modelo_usado'])
-
-            with col2:
-                st.metric("R² Score", f"{predicao['confianca']:.3f}")
-
-            with col3:
-                mae = resultado_treino['mae']
-                st.metric("Erro Médio (MAE)", f"{mae:.0f} casos")
-
-            # Tabela com resultados de treino
-            with st.expander("📈 Ver Desempenho de Todos os Modelos"):
-                st.dataframe(
-                    resultado_treino['resultados'].style.format({
-                        'MAE': '{:.2f}',
-                        'R²': '{:.3f}',
-                        'RMSE': '{:.2f}'
-                    }),
-                    use_container_width=True
-                )
+            except Exception as e:
+                st.error(f"❌ Erro na predição: {str(e)}")
 
         # Dados brutos (expansível)
         with st.expander("📋 Ver Dados Brutos"):
@@ -388,7 +340,6 @@ def main():
                 st.markdown(f"**Total de registros:** {len(df):,}")
                 st.dataframe(df, use_container_width=True)
 
-                # Botão de download
                 csv = exportar_csv(df, estado_selecionado)
                 st.download_button(
                     label="📥 Baixar dados em CSV",
@@ -397,7 +348,7 @@ def main():
                     mime='text/csv'
                 )
             except Exception as e:
-                st.error(f"Erro ao exibir dados brutos: {str(e)}")
+                st.error(f"❌ Erro ao exibir dados brutos: {str(e)}")
 
     else:
         # Tela inicial
@@ -412,9 +363,8 @@ def main():
                 use_container_width=True
             )
         except Exception as e:
-            st.error(f"Erro ao criar mapa: {str(e)}")
+            st.error(f"❌ Erro ao criar mapa: {str(e)}")
 
-        # Informações adicionais
         st.markdown("---")
 
         col1, col2, col3 = st.columns(3)
@@ -435,7 +385,7 @@ def main():
             ### 🤖 Machine Learning
 
             Modelos disponíveis:
-            - 📊 Naive Bayes
+            - 📊 Ridge & Lasso
             - 🌳 Random Forest
             - 📈 Gradient Boosting
             - 🚀 XGBoost
@@ -461,4 +411,3 @@ if __name__ == "__main__":
     except Exception as e:
         st.error("❌ Erro crítico na aplicação!")
         st.exception(e)
-        st.info("💡 Tente recarregar a página (F5) ou limpar o cache (Settings > Clear cache)")

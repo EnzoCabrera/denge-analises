@@ -1,8 +1,3 @@
-"""
-Módulo de Feature Engineering para Predição de Dengue
-Cria features derivadas para melhorar acurácia dos modelos
-"""
-
 import pandas as pd
 import numpy as np
 import streamlit as st
@@ -10,21 +5,9 @@ from typing import Tuple
 
 
 def adicionar_features_engenheiradas(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Cria features derivadas para melhorar desempenho dos modelos
-
-    Args:
-        df: DataFrame com dados básicos (clima + casos)
-
-    Returns:
-        DataFrame com features adicionais
-    """
 
     df = df.copy()
 
-    # =====================================================
-    # 1. FEATURES DE TEMPERATURA
-    # =====================================================
 
     # Amplitude térmica diária
     if 'temperatura_max' in df.columns and 'temperatura_min' in df.columns:
@@ -42,9 +25,6 @@ def adicionar_features_engenheiradas(df: pd.DataFrame) -> pd.DataFrame:
         # Temperatura acima de 20°C (limite mínimo para reprodução)
         df['temp_acima_20'] = (df['temperatura_media'] > 20).astype(int)
 
-    # =====================================================
-    # 2. FEATURES DE UMIDADE E CHUVA
-    # =====================================================
 
     if 'umidade_relativa' in df.columns and 'precipitacao' in df.columns:
         # Índice combinado umidade × chuva (normalizado)
@@ -74,9 +54,6 @@ def adicionar_features_engenheiradas(df: pd.DataFrame) -> pd.DataFrame:
         # Sem chuva (<10mm)
         df['sem_chuva'] = (df['precipitacao'] < 10).astype(int)
 
-    # =====================================================
-    # 3. FEATURES TEMPORAIS (SAZONALIDADE)
-    # =====================================================
 
     if 'mes' in df.columns:
         # Estação do ano (hemisfério sul)
@@ -105,9 +82,7 @@ def adicionar_features_engenheiradas(df: pd.DataFrame) -> pd.DataFrame:
         df['mes_sin'] = np.sin(2 * np.pi * df['mes'] / 12)
         df['mes_cos'] = np.cos(2 * np.pi * df['mes'] / 12)
 
-    # =====================================================
-    # 4. FEATURES DE LAG (HISTÓRICO) - MUITO IMPORTANTE!
-    # =====================================================
+
 
     if 'casos_dengue' in df.columns:
         # Ordenar por ano e mês para garantir sequência temporal
@@ -136,9 +111,6 @@ def adicionar_features_engenheiradas(df: pd.DataFrame) -> pd.DataFrame:
         df['taxa_crescimento'] = df['casos_dengue'].pct_change().fillna(0)
         df['taxa_crescimento'] = df['taxa_crescimento'].replace([np.inf, -np.inf], 0)
 
-    # =====================================================
-    # 5. INTERAÇÕES ENTRE FEATURES
-    # =====================================================
 
     if 'temperatura_media' in df.columns and 'umidade_relativa' in df.columns:
         # Temperatura × Umidade (condição ideal combinada)
@@ -170,9 +142,6 @@ def adicionar_features_engenheiradas(df: pd.DataFrame) -> pd.DataFrame:
                  df['chuva_moderada'] + df['estacao_favoravel']) / 4
         )
 
-    # =====================================================
-    # 6. FEATURES ESTATÍSTICAS (ROLLING WINDOWS)
-    # =====================================================
 
     if 'temperatura_media' in df.columns:
         # Desvio padrão da temperatura (últimos 3 meses)
@@ -193,15 +162,6 @@ def adicionar_features_engenheiradas(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def selecionar_features_relevantes(df: pd.DataFrame) -> Tuple[pd.DataFrame, list]:
-    """
-    Seleciona as features mais relevantes para o modelo
-
-    Args:
-        df: DataFrame com todas as features engenheiradas
-
-    Returns:
-        Tuple (DataFrame com features selecionadas, lista de nomes das features)
-    """
 
     # Features a serem usadas (em ordem de importância estimada)
     features_prioritarias = [
@@ -255,12 +215,6 @@ def selecionar_features_relevantes(df: pd.DataFrame) -> Tuple[pd.DataFrame, list
     total_criadas = len([col for col in df.columns if col not in
                          ['ano', 'mes', 'casos_dengue', 'risco_dengue', 'ano_mes', 'mes_nome']])
 
-    if total_disponiveis < 5:
-        st.warning(f"⚠️ Apenas {total_disponiveis} features disponíveis de {len(features_prioritarias)} esperadas!")
-        st.info("💡 Verifique se o DataFrame de entrada contém as colunas necessárias.")
-    else:
-        st.success(f"✅ {total_disponiveis} features selecionadas de {total_criadas} criadas!")
-
     # Retornar apenas as colunas disponíveis
     X = df[features_disponiveis].copy()
 
@@ -268,15 +222,6 @@ def selecionar_features_relevantes(df: pd.DataFrame) -> Tuple[pd.DataFrame, list
 
 
 def validar_features(df: pd.DataFrame) -> bool:
-    """
-    Valida se o DataFrame tem features suficientes para feature engineering
-
-    Args:
-        df: DataFrame a ser validado
-
-    Returns:
-        True se válido, False caso contrário
-    """
 
     # Colunas mínimas necessárias
     colunas_minimas = ['temperatura_media', 'umidade_relativa', 'precipitacao', 'mes']

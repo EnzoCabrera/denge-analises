@@ -1,7 +1,3 @@
-"""
-Módulo de predição de casos de dengue para o mês atual
-"""
-
 import pandas as pd
 import numpy as np
 from datetime import datetime
@@ -20,9 +16,9 @@ except ImportError:
 
 
 class PredicaoDengue:
-    """
-    Classe para predição de casos de dengue no mês atual
-    """
+
+    #Classe para predição de casos de dengue no mês atual
+
 
     def __init__(self):
         """Inicializa o modelo de predição"""
@@ -34,19 +30,6 @@ class PredicaoDengue:
         self.mae_score = 0.0
 
     def treinar_modelo(self, df: pd.DataFrame) -> dict:
-        """
-        Treina modelos de regressão para predição de casos
-
-        Args:
-            df: DataFrame com histórico de dados
-
-        Returns:
-            Dict com resultados do treinamento
-        """
-
-        # =====================================================
-        # 1. PREPARAR DADOS COM FEATURE ENGINEERING
-        # =====================================================
 
         try:
             from backend.feature_engineering import (
@@ -76,9 +59,6 @@ class PredicaoDengue:
         if len(X) < 10:
             raise ValueError(f"Dados insuficientes: apenas {len(X)} registros")
 
-        # =====================================================
-        # 2. SPLIT E NORMALIZAÇÃO
-        # =====================================================
 
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=0.2, random_state=42
@@ -87,10 +67,6 @@ class PredicaoDengue:
         # Normalizar
         X_train_scaled = self.scaler.fit_transform(X_train)
         X_test_scaled = self.scaler.transform(X_test)
-
-        # =====================================================
-        # 3. DEFINIR MODELOS
-        # =====================================================
 
         modelos = {
             'Random Forest': RandomForestRegressor(
@@ -122,10 +98,6 @@ class PredicaoDengue:
                 max_depth=6,
                 random_state=42
             )
-
-        # =====================================================
-        # 4. TREINAR E AVALIAR
-        # =====================================================
 
         resultados = []
         melhor_r2 = -np.inf
@@ -171,10 +143,6 @@ class PredicaoDengue:
         if melhor_modelo is None:
             raise ValueError("Nenhum modelo foi treinado com sucesso")
 
-        # =====================================================
-        # 5. SALVAR ATRIBUTOS DA CLASSE (IMPORTANTE!)
-        # =====================================================
-
         self.melhor_modelo = melhor_modelo
         self.melhor_modelo_nome = melhor_nome
         self.features = features
@@ -192,23 +160,9 @@ class PredicaoDengue:
         }
 
     def prever_mes_atual(self, df: pd.DataFrame, clima_atual: dict) -> dict:
-        """
-        Faz predição para o mês atual baseado no clima estimado
-
-        Args:
-            df: DataFrame com histórico de dados
-            clima_atual: Dict com clima atual/estimado
-
-        Returns:
-            Dict com predição e metadados
-        """
 
         if self.melhor_modelo is None:
             raise ValueError("Modelo não foi treinado. Execute treinar_modelo() primeiro.")
-
-        # =====================================================
-        # 1. PREPARAR FEATURES PARA PREDIÇÃO
-        # =====================================================
 
         # Feature engineering no clima atual
         X_novo = pd.DataFrame([{
@@ -225,7 +179,7 @@ class PredicaoDengue:
             from backend.feature_engineering import adicionar_features_engenheiradas
 
             # Adicionar histórico recente para features de lag
-            df_temp = df.copy().tail(10)  # Últimos 10 registros
+            df_temp = df.copy().tail(10)
             df_temp = pd.concat([df_temp, X_novo], ignore_index=True)
 
             # Feature engineering
@@ -245,10 +199,6 @@ class PredicaoDengue:
             features_disponiveis = [f for f in features_basicas if f in X_novo.columns]
             X_novo_final = X_novo[features_disponiveis]
 
-        # =====================================================
-        # 2. FAZER PREDIÇÃO
-        # =====================================================
-
         # Normalizar
         X_novo_scaled = self.scaler.transform(X_novo_final)
 
@@ -258,19 +208,11 @@ class PredicaoDengue:
         # Garantir que não seja negativo
         casos_previstos = max(0, casos_previstos)
 
-        # =====================================================
-        # 3. CALCULAR INTERVALO DE CONFIANÇA
-        # =====================================================
-
         # Usar erro médio (MAE) do treino para estimar intervalo
         mae = self.mae_score
 
         intervalo_inferior = max(0, casos_previstos - (1.5 * mae))
         intervalo_superior = casos_previstos + (1.5 * mae)
-
-        # =====================================================
-        # 4. CALCULAR VARIAÇÃO vs HISTÓRICO
-        # =====================================================
 
         # Média histórica do mesmo mês
         mes_atual = datetime.now().month
@@ -287,32 +229,12 @@ class PredicaoDengue:
         else:
             variacao_pct = 0.0
 
-        # =====================================================
-        # 5. GERAR ALERTA BASEADO NA VARIAÇÃO
-        # =====================================================
-
-        if variacao_pct > 50:
-            alerta = "🚨 **ALERTA CRÍTICO:** Predição indica aumento MUITO SIGNIFICATIVO nos casos (+50% vs média histórica). Reforçar ações de prevenção!"
-        elif variacao_pct > 20:
-            alerta = "⚠️ **ATENÇÃO:** Predição indica aumento moderado nos casos (+20% vs média histórica). Monitorar de perto."
-        elif variacao_pct > 0:
-            alerta = "ℹ️ **LEVE AUMENTO:** Predição indica pequeno aumento nos casos vs média histórica. Manter vigilância."
-        elif variacao_pct > -20:
-            alerta = "✅ **ESTÁVEL/MELHORA:** Predição indica redução ou estabilidade nos casos. Continuar ações de prevenção."
-        else:
-            alerta = "🎉 **REDUÇÃO SIGNIFICATIVA:** Predição indica forte redução nos casos (-20% vs média). Ações de prevenção funcionando!"
-
-        # =====================================================
-        # 6. RETORNAR RESULTADO COMPLETO
-        # =====================================================
-
         return {
             'casos_previstos': float(casos_previstos),
             'intervalo_inferior': float(intervalo_inferior),
             'intervalo_superior': float(intervalo_superior),
             'confianca': float(self.r2_score),
             'modelo_usado': self.melhor_modelo_nome,
-            'alerta': alerta,
             'variacao_historico': float(variacao_pct),
             'media_historica': float(media_historica),
             'mes': mes_atual,
@@ -321,15 +243,6 @@ class PredicaoDengue:
 
 
 def obter_clima_atual_estimado(estado_nome: str) -> dict:
-    """
-    Obtém clima atual estimado baseado em médias históricas
-
-    Args:
-        estado_nome: Nome do estado
-
-    Returns:
-        Dict com clima estimado
-    """
 
     # Mês atual
     mes_atual = datetime.now().month
